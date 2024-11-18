@@ -1,0 +1,13 @@
+(library
+ (public_name reflection)
+ (name reflection)
+ (modules reflection)
+ (flags
+  (:standard -w "-58"))
+ (libraries binsec.sse))
+
+(plugin
+ (name reflection)
+ (libraries reflection)
+ (site
+  (binsec plugins)))
