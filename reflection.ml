@@ -8,14 +8,54 @@ include Cli.Make (struct
   let shortname = "reflection"
 end)
 
+type Ast.Instr.t += IsSymbolic of Ast.Loc.t Ast.loc
+
 let () =
   Exec.register_plugin
     ( module struct
       let name = "reflection"
 
-      let grammar_extension = []
+      (* sse/plugin/checkct
 
-      let instruction_printer = None
+           in sse/types, check if get_value raises excpetion -> symbolic
+
+            rule fallthrough
+            Token("lvalue")
+            String(":=")
+            String("is_symbolic")
+            char('(')
+            Toke("arg")
+            char(')')
+
+         type Ast.Instr.t += ...Will call script function IsSymbolic of Lvalue.t.loc * Expr.t loc <- loc is to identify which line caused the error
+
+         type builtin += IsSymbolic of Dba.Lvalue * Dba.Exper.t
+      *)
+      let grammar_extension =
+        [ Dyp.Add_rules
+            [ ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "is_symbolic")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("ident", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [Libparser.Syntax.Loc lval; _; _; _; _; _] ->
+                      (Libparser.Syntax.Instr (IsSymbolic lval), [])
+                  | _ ->
+                      assert false ) ] ]
+
+      let instruction_printer =
+        Some
+          (fun ppf -> function
+            | IsSymbolic (loc, _) ->
+                Format.fprintf ppf "%a := is_symbolic(arg)" Ast.Loc.pp loc ;
+                true
+            | _ ->
+                false )
 
       let declaration_printer = None
 
@@ -42,10 +82,12 @@ let () =
 
               let declaration_callback = None
 
+              (* translate the Ast.Instr.t to the builtin *)
               let instruction_callback = None
 
               let process_callback = None
 
+              (* Perform action of builtin, so here call get_value *)
               let builtin_callback = None
 
               let builtin_printer = None
