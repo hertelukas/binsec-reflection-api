@@ -1,6 +1,7 @@
 open Binsec
 open Libsse
 open Types
+open Ir
 
 include Cli.Make (struct
   let name = "Symbolic Reflection API"
@@ -8,7 +9,9 @@ include Cli.Make (struct
   let shortname = "reflection"
 end)
 
-type Ast.Instr.t += IsSymbolic of Ast.Loc.t Ast.loc
+type Ast.Instr.t += IsSymbolic of Ast.Loc.t * Ast.Expr.t Ast.loc
+
+type builtin += IsSymbolicBuiltin of Dba.LValue.t * Dba.Expr.t
 
 let () =
   Exec.register_plugin
@@ -29,7 +32,7 @@ let () =
 
          type Ast.Instr.t += ...Will call script function IsSymbolic of Lvalue.t.loc * Expr.t loc <- loc is to identify which line caused the error
 
-         type builtin += IsSymbolic of Dba.Lvalue * Dba.Exper.t
+         type builtin += IsSymbolic of Dba.Lvalue * Dba.Expr.t
       *)
       let grammar_extension =
         [ Dyp.Add_rules
@@ -43,19 +46,17 @@ let () =
                 , "default_priority"
                 , [] )
               , fun _ -> function
-                  | [Libparser.Syntax.Loc lval; _; _; _; _; _] ->
-                      (Libparser.Syntax.Instr (IsSymbolic lval), [])
+                  | [ Libparser.Syntax.Loc lval
+                    ; _
+                    ; _
+                    ; _
+                    ; Libparser.Syntax.Expr exp
+                    ; _ ] ->
+                      (Libparser.Syntax.Instr (IsSymbolic (lval, exp)), [])
                   | _ ->
                       assert false ) ] ]
 
-      let instruction_printer =
-        Some
-          (fun ppf -> function
-            | IsSymbolic (loc, _) ->
-                Format.fprintf ppf "%a := is_symbolic(arg)" Ast.Loc.pp loc ;
-                true
-            | _ ->
-                false )
+      let instruction_printer = None
 
       let declaration_printer = None
 
@@ -83,7 +84,10 @@ let () =
               let declaration_callback = None
 
               (* translate the Ast.Instr.t to the builtin *)
-              let instruction_callback = None
+              let instruction_callback =
+                Some
+                  (fun inst env ->
+                    match inst with IsSymbolic (lval, expr) -> [] | _ -> [] )
 
               let process_callback = None
 
