@@ -9,7 +9,7 @@ include Cli.Make (struct
   let shortname = "reflection"
 end)
 
-type Ast.Instr.t += IsSymbolic of Ast.Loc.t * Ast.Expr.t Ast.loc
+type Ast.Instr.t += IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
 
 type builtin += IsSymbolicBuiltin of Dba.LValue.t * Dba.Expr.t
 
@@ -41,7 +41,7 @@ let () =
                   ; Dyp.Regexp (RE_String ":=")
                   ; Dyp.Regexp (RE_String "is_symbolic")
                   ; Dyp.Regexp (RE_Char '(')
-                  ; Dyp.Non_ter ("ident", No_priority)
+                  ; Dyp.Non_ter ("expr", No_priority)
                   ; Dyp.Regexp (RE_Char ')') ]
                 , "default_priority"
                 , [] )
