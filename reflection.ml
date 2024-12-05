@@ -9,9 +9,10 @@ include Cli.Make (struct
   let shortname = "reflection"
 end)
 
-type Ast.Instr.t += IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
+type Ast.Instr.t +=
+  | IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
 
-type builtin += IsSymbolicBuiltin of Dba.LValue.t * Dba.Expr.t
+type builtin += IsSymbolicBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
 
 let () =
   Exec.register_plugin
@@ -42,6 +43,8 @@ let () =
                   ; Dyp.Regexp (RE_String "is_symbolic")
                   ; Dyp.Regexp (RE_Char '(')
                   ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
                   ; Dyp.Regexp (RE_Char ')') ]
                 , "default_priority"
                 , [] )
@@ -50,9 +53,13 @@ let () =
                     ; _
                     ; _
                     ; _
-                    ; Libparser.Syntax.Expr exp
+                    ; Libparser.Syntax.Expr sym_var
+                    ; _
+                    ; Libparser.Syntax.Expr length
                     ; _ ] ->
-                      (Libparser.Syntax.Instr (IsSymbolic (lval, exp)), [])
+                      ( Libparser.Syntax.Instr
+                          (IsSymbolic (lval, sym_var, length))
+                      , [] )
                   | _ ->
                       assert false ) ] ]
 
@@ -84,15 +91,45 @@ let () =
               let declaration_callback = None
 
               (* translate the Ast.Instr.t to the builtin *)
+              (* (Ast.Instr.t -> Script.env -> Ir.fallthrough list) option *)
               let instruction_callback =
                 Some
                   (fun inst env ->
-                    match inst with IsSymbolic (lval, expr) -> [] | _ -> [] )
+                    match inst with
+                    | IsSymbolic (lval, sym_var, length) -> (
+                      match Script.eval_loc ~size:1 lval env with
+                      | Var var ->
+                          [ Builtin
+                              (IsSymbolicBuiltin
+                                 ( var
+                                 , Script.eval_expr sym_var env
+                                 , Script.eval_expr length env ) ) ]
+                      | Restrict (var, {hi; lo}) ->
+                          [] (* TODO *)
+                      | Store (bytes, dir, addr, base) ->
+                          [] (* TODO *) )
+                    | _ ->
+                        [] )
 
               let process_callback = None
 
               (* Perform action of builtin, so here call get_value *)
-              let builtin_callback = None
+              (* (Ir.builtin ->
+                 (Virtual_address.t ->
+                 path ->
+                 int ->
+                 state ->
+                 (state, Types.status) Result.t)
+                 option)
+                 option
+              *)
+              let builtin_callback =
+                Some
+                  (function
+                  | IsSymbolicBuiltin (lval, sym_var, length) ->
+                      None
+                  | _ ->
+                      None )
 
               let builtin_printer = None
 
