@@ -20,6 +20,8 @@ module Reflection (P : Path.S) (S : STATE) :
 
   and state = S.t
 
+  module Eval = Eval.Make (P) (S)
+
   let initialization_callback = None
 
   let declaration_callback = None
@@ -47,6 +49,29 @@ module Reflection (P : Path.S) (S : STATE) :
 
   let process_callback = None
 
+  let is_symbolic dst_var sym_var length addr path _ state :
+      (S.t, status) Result.t =
+    let sym_var, state = Eval.safe_eval sym_var state path in
+    let length, state = Eval.safe_eval length state path in
+    (* TODO use length *)
+    match S.get_value sym_var state with
+    | exception Non_unique ->
+        (* Value is concrete *)
+        let new_state =
+          S.assign dst_var
+            (S.Value.constant (Bitvector.ones dst_var.size))
+            state
+        in
+        Ok new_state
+    | _ ->
+        (* Value is symbolic *)
+        let new_state =
+          S.assign dst_var
+            (S.Value.constant (Bitvector.zeros dst_var.size))
+            state
+        in
+        Ok new_state
+
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
      (Virtual_address.t ->
@@ -59,7 +84,11 @@ module Reflection (P : Path.S) (S : STATE) :
   *)
   let builtin_callback =
     Some
-      (function IsSymbolicBuiltin (lval, sym_var, length) -> None | _ -> None)
+      (function
+      | IsSymbolicBuiltin (lval, sym_var, length) ->
+          Some (is_symbolic lval sym_var length)
+      | _ ->
+          None )
 
   let builtin_printer = None
 
