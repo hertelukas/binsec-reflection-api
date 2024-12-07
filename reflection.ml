@@ -29,6 +29,7 @@ module Reflection (P : Path.S) (S : STATE) :
   (* translate the Ast.Instr.t to the builtin *)
   (* (Ast.Instr.t -> Script.env -> Ir.fallthrough list) option *)
   let instruction_callback =
+    let symbolic = Printf.sprintf "%%symbolic%%%d" in
     Some
       (fun inst env ->
         match inst with
@@ -41,16 +42,36 @@ module Reflection (P : Path.S) (S : STATE) :
                      , Script.eval_expr sym_var env
                      , Script.eval_expr length env ) ) ]
           | Restrict (var, {hi; lo}) ->
-              [] (* TODO *)
+              let size' = hi - lo + 1 in
+              let name' = symbolic size' in
+              let var' = Dba.Var.temporary name' (Size.Bit.create size') in
+              let rval =
+                Dba_utils.Expr.complement (Dba.Expr.v var') ~lo ~hi var
+              in
+              [ Builtin
+                  (IsSymbolicBuiltin
+                     ( var'
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr length env ) )
+              ; Assign {var; rval} ]
           | Store (bytes, dir, addr, base) ->
-              [] (* TODO *) )
+              let size' = 8 * bytes in
+              let name' = symbolic size' in
+              let var' = Dba.Var.temporary name' (Size.Bit.create size') in
+              let rval = Dba.Expr.v var' in
+              [ Builtin
+                  (IsSymbolicBuiltin
+                     ( var'
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr length env ) )
+              ; Store {base; dir; addr; rval} ] )
         | _ ->
             [] )
 
   let process_callback = None
 
-  let is_symbolic dst_var sym_var length addr path _ state :
-      (S.t, status) Result.t =
+  let is_symbolic dst_var sym_var length _ path _ state : (S.t, status) Result.t
+      =
     let sym_var, state = Eval.safe_eval sym_var state path in
     let length, state = Eval.safe_eval length state path in
     let length = Bitvector.to_uint (S.get_value length state) in
