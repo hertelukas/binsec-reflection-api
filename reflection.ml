@@ -53,7 +53,11 @@ module Reflection (P : Path.S) (S : STATE) :
       (S.t, status) Result.t =
     let sym_var, state = Eval.safe_eval sym_var state path in
     let length, state = Eval.safe_eval length state path in
-    (* TODO use length *)
+    let length = Bitvector.to_uint (S.get_value length state) in
+    (* TODO assert length % 8 == 0 *)
+    let sym_var, state =
+      S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
+    in
     match S.get_value sym_var state with
     | exception Non_unique ->
         (* Value is concrete *)
