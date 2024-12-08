@@ -1,0 +1,60 @@
+* binsec-reflection-api
+
+** Running the Example
+
+#+begin_src bash
+cd examples
+make
+binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.snapshot
+#+end_src
+
+* Primitives
+** Core Reflection Primitives [0/13]
+- [ ] ~void error(char *msg);~
+- [ ] ~cnstr_t state_constraints();~
+- [ ] ~void print_byte(char byte);~
+- [ ] ~void print_constraint(cnstr_t cnstr);~
+- [ ] ~size_t maximize(void* sym_var, size_t length);~
+- [ ] ~size_t minimize(void* sym_var, size_t length);~
+- [ ] ~int is_symbolic(symbolic sym_var, size_t length);~
+  + Created as builtin
+- [ ] ~symbolic new_sym_var(size_t length);~
+- [ ] ~symbolic new_sym_var_named(char* name, size_t length);~
+- [ ] ~symbolic new_sym_var_array(char* name, size_t index, size_t size);~
+- [ ] ~int is_sat(cnstr_t cnstr);~
+- [ ] ~void assume(cnstr_t cnstr);~
+- [ ] ~long eval(symbolic var, size_t length, cnstr_t extra);~
+
+** Memory Primitives [0/3]
+- [ ] ~void* mem_alloc(size_t size);~
+- [ ] ~size_t mem_bytes(void* ptr);~
+- [ ] ~void mem_free(void* ptr);~
+
+
+** Symbolic Value Primitives [0/4]
+- [ ] ~symbolic _solver_Concat(symbolic sym_var, symbolic sym_var2, size_t length1, size_t length2);~
+- [ ] ~symbolic _solver_Extract(symbolic sym_var, size_t start, size_t end, size_t length);~
+- [ ] ~symbolic _solver_ZeroExt(symbolic sym_var, size_t to_extend, size_t length);~
+- [ ] ~symbolic _solver_SignExt(symbolic sym_var, size_t to_extend, size_t length);~
+
+** Constraint Primitives [0/11]
+- [ ] ~cnstr_t _solver_NOT(cnstr_t cnstr1);~
+- [ ] ~cnstr_t _solver_Or(cnstr_t cnstr1, cnstr_t cnstr2);~
+- [ ] ~cnstr_t _solver_And(cnstr_t cnstr1, cnstr_t cnstr2);~
+- [ ] ~cnstr_t _solver_EQ(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [ ] ~cnstr_t _solver_NEQ(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [ ] ~cnstr_t _solver_LT(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [ ] ~cnstr_t _solver_LE(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [ ] ~cnstr_t _solver_SLT(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [ ] ~cnstr_t _solver_SLE(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [ ] ~cnstr_t _solver_ITE(cnstr_t cond, cnstr_t cnstr1, cnstr_t cnstr2);~
+- [ ] ~symbolic _solver_ITE_VAR(cnstr_t cond, symbolic sym_var, symbolic sym_var2, size_t length1, size_t length2);~
+
+** Summary Validation [0/7]
+- [ ] ~state_t save_current_state();~
+- [ ] ~void mem_addr(char* name, void* addr, size_t n);~
+- [ ] ~cnstr_t get_cnstr(symbolic var, size_t size);~
+- [ ] ~void store_cnstr(char* name, cnstr_t constraint);~
+- [ ] ~void halt_all(state_t state);~
+- [ ] ~result_t check_implications(char* constraint1, char* constraint2);~
+- [ ] ~void print_counterexamples(result_t result);~
