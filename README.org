@@ -11,25 +11,39 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 * Primitives
 ** Core Reflection Primitives [0/13]
 - [ ] ~void error(char *msg);~
+  + As builtin
+  + See new_sym_var_named
+  + Logger.error to print
+  + If it is always the end, instead Ok State return Err "reason"
 - [ ] ~cnstr_t state_constraints();~
 - [ ] ~void print_byte(char byte);~
 - [ ] ~void print_constraint(cnstr_t cnstr);~
 - [ ] ~size_t maximize(void* sym_var, size_t length);~
+  + Find biggest value that is possible
+  + Binary search
+  + We assume that it is greater or smaller, check if it is solvable with State.assume
+  + Adapt range, repeat
+  + State.value.binary uge ule...
 - [ ] ~size_t minimize(void* sym_var, size_t length);~
 - [ ] ~int is_symbolic(symbolic sym_var, size_t length);~
   + Created as builtin
 - [ ] ~symbolic new_sym_var(size_t length);~
+  + Create as builtin, directly as length
+  + Then, extend to 64 bit in DBA
 - [ ] ~symbolic new_sym_var_named(char* name, size_t length);~
+  + Also as builtin
 - [ ] ~symbolic new_sym_var_array(char* name, size_t index, size_t size);~
 - [ ] ~int is_sat(cnstr_t cnstr);~
+  + Also as builtin, evaluate constraint
+  + State.assume, if returns some, true; none, false
 - [ ] ~void assume(cnstr_t cnstr);~
+  + Already exists like assert
 - [ ] ~long eval(symbolic var, size_t length, cnstr_t extra);~
 
 ** Memory Primitives [0/3]
 - [ ] ~void* mem_alloc(size_t size);~
 - [ ] ~size_t mem_bytes(void* ptr);~
 - [ ] ~void mem_free(void* ptr);~
-
 
 ** Symbolic Value Primitives [0/4]
 - [ ] ~symbolic _solver_Concat(symbolic sym_var, symbolic sym_var2, size_t length1, size_t length2);~
