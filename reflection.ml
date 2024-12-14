@@ -11,6 +11,8 @@ end)
 
 type Ast.Instr.t +=
   | IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | Maximize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | Minimize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | NewSymVar of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
 
 type builtin +=
@@ -166,6 +168,54 @@ let () =
       let grammar_extension =
         [ Dyp.Add_rules
             [ ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "maximize")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; _
+                    ; _
+                    ; _
+                    ; Libparser.Syntax.Expr sym_var
+                    ; _
+                    ; Libparser.Syntax.Expr length
+                    ; _ ] ->
+                      ( Libparser.Syntax.Instr (Maximize (lval, sym_var, length))
+                      , [] )
+                  | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "minimize")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; _
+                    ; _
+                    ; _
+                    ; Libparser.Syntax.Expr sym_var
+                    ; _
+                    ; Libparser.Syntax.Expr length
+                    ; _ ] ->
+                      ( Libparser.Syntax.Instr (Minimize (lval, sym_var, length))
+                      , [] )
+                  | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
                 , [ Dyp.Non_ter ("loc", No_priority)
                   ; Dyp.Regexp (RE_String ":=")
                   ; Dyp.Regexp (RE_String "is_symbolic")
