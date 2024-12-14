@@ -68,6 +68,14 @@ module Reflection (P : Path.S) (S : STATE) :
                      , Script.eval_expr sym_var env
                      , Script.eval_expr length env ) )
               ; Store {base; dir; addr; rval} ] )
+        | NewSymVar (lval, length) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [Builtin (NewSymVarBuiltin (var, Script.eval_expr length env))]
+          | Restrict (var, {hi; lo}) ->
+              [] (* TODO *)
+          | Store (bytes, dir, addr, base) ->
+              [] (* TODO *) )
         | _ ->
             [] )
 
@@ -100,6 +108,15 @@ module Reflection (P : Path.S) (S : STATE) :
         in
         Ok new_state
 
+  let new_sym_var dst_var length _ path _ state : (S.t, status) Result.t =
+    let length, state = Eval.safe_eval length state path in
+    let length = Bitvector.to_uint (S.get_value length state) in
+    let state =
+      (* TODO probably wrong, as I don't want to create a constant *)
+      S.assign dst_var (S.Value.constant (Bitvector.ones length)) state
+    in
+    Ok state
+
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
      (Virtual_address.t ->
@@ -115,6 +132,8 @@ module Reflection (P : Path.S) (S : STATE) :
       (function
       | IsSymbolicBuiltin (lval, sym_var, length) ->
           Some (is_symbolic lval sym_var length)
+      | NewSymVarBuiltin (lval, length) ->
+          Some (new_sym_var lval length)
       | _ ->
           None )
 
