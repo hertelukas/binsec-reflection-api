@@ -11,8 +11,11 @@ end)
 
 type Ast.Instr.t +=
   | IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | NewSymVar of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
 
-type builtin += IsSymbolicBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
+type builtin +=
+  | IsSymbolicBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
+  | NewSymVarBuiltin of Dba.Var.t * Dba.Expr.t
 
 module Reflection (P : Path.S) (S : STATE) :
   Exec.EXTENSION with type path = P.t and type state = S.t = struct
@@ -166,6 +169,25 @@ let () =
                       ( Libparser.Syntax.Instr
                           (IsSymbolic (lval, sym_var, length))
                       , [] )
+                  | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "new_sym_var")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; _
+                    ; _
+                    ; _
+                    ; Libparser.Syntax.Expr length
+                    ; _ ] ->
+                      (Libparser.Syntax.Instr (NewSymVar (lval, length)), [])
                   | _ ->
                       assert false ) ] ]
 

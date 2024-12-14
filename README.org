@@ -9,7 +9,7 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 #+end_src
 
 * Primitives
-** Core Reflection Primitives [0/13]
+** Core Reflection Primitives [2/13]
 - [ ] ~void error(char *msg);~
   + As builtin
   + See new_sym_var_named
@@ -25,7 +25,7 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
   + Adapt range, repeat
   + State.value.binary uge ule...
 - [ ] ~size_t minimize(void* sym_var, size_t length);~
-- [ ] ~int is_symbolic(symbolic sym_var, size_t length);~
+- [X] ~int is_symbolic(symbolic sym_var, size_t length);~
   + Created as builtin
 - [ ] ~symbolic new_sym_var(size_t length);~
   + Create as builtin, directly as length
@@ -36,7 +36,7 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 - [ ] ~int is_sat(cnstr_t cnstr);~
   + Also as builtin, evaluate constraint
   + State.assume, if returns some, true; none, false
-- [ ] ~void assume(cnstr_t cnstr);~
+- [X] ~void assume(cnstr_t cnstr);~
   + Already exists like assert
 - [ ] ~long eval(symbolic var, size_t length, cnstr_t extra);~
 
