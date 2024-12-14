@@ -149,6 +149,34 @@ let () =
     ( module struct
       let name = "reflection"
 
+      (* Build parser for l:=func(arg1, arg2) *)
+      let loc_expr_expr_parser func_name =
+        ( "fallthrough"
+        , [ Dyp.Non_ter ("loc", No_priority)
+          ; Dyp.Regexp (RE_String ":=")
+          ; Dyp.Regexp (RE_String func_name)
+          ; Dyp.Regexp (RE_Char '(')
+          ; Dyp.Non_ter ("expr", No_priority)
+          ; Dyp.Regexp (RE_Char ',')
+          ; Dyp.Non_ter ("expr", No_priority)
+          ; Dyp.Regexp (RE_Char ')') ]
+        , "default_priority"
+        , [] )
+
+      (* Applies instr to l = (arg1, arg2) *)
+      let loc_expr_expr_instr instr = function
+        | [ Libparser.Syntax.Loc lval
+          ; _
+          ; _
+          ; _
+          ; Libparser.Syntax.Expr arg1
+          ; _
+          ; Libparser.Syntax.Expr arg2
+          ; _ ] ->
+            (Libparser.Syntax.Instr (instr (lval, arg1, arg2)), [])
+        | _ ->
+            assert false
+
       (* sse/plugin/checkct
 
            in sse/types, check if get_value raises excpetion -> symbolic
@@ -167,79 +195,18 @@ let () =
       *)
       let grammar_extension =
         [ Dyp.Add_rules
-            [ ( ( "fallthrough"
-                , [ Dyp.Non_ter ("loc", No_priority)
-                  ; Dyp.Regexp (RE_String ":=")
-                  ; Dyp.Regexp (RE_String "maximize")
-                  ; Dyp.Regexp (RE_Char '(')
-                  ; Dyp.Non_ter ("expr", No_priority)
-                  ; Dyp.Regexp (RE_Char ',')
-                  ; Dyp.Non_ter ("expr", No_priority)
-                  ; Dyp.Regexp (RE_Char ')') ]
-                , "default_priority"
-                , [] )
-              , fun _ -> function
-                  | [ Libparser.Syntax.Loc lval
-                    ; _
-                    ; _
-                    ; _
-                    ; Libparser.Syntax.Expr sym_var
-                    ; _
-                    ; Libparser.Syntax.Expr length
-                    ; _ ] ->
-                      ( Libparser.Syntax.Instr (Maximize (lval, sym_var, length))
-                      , [] )
-                  | _ ->
-                      assert false )
-            ; ( ( "fallthrough"
-                , [ Dyp.Non_ter ("loc", No_priority)
-                  ; Dyp.Regexp (RE_String ":=")
-                  ; Dyp.Regexp (RE_String "minimize")
-                  ; Dyp.Regexp (RE_Char '(')
-                  ; Dyp.Non_ter ("expr", No_priority)
-                  ; Dyp.Regexp (RE_Char ',')
-                  ; Dyp.Non_ter ("expr", No_priority)
-                  ; Dyp.Regexp (RE_Char ')') ]
-                , "default_priority"
-                , [] )
-              , fun _ -> function
-                  | [ Libparser.Syntax.Loc lval
-                    ; _
-                    ; _
-                    ; _
-                    ; Libparser.Syntax.Expr sym_var
-                    ; _
-                    ; Libparser.Syntax.Expr length
-                    ; _ ] ->
-                      ( Libparser.Syntax.Instr (Minimize (lval, sym_var, length))
-                      , [] )
-                  | _ ->
-                      assert false )
-            ; ( ( "fallthrough"
-                , [ Dyp.Non_ter ("loc", No_priority)
-                  ; Dyp.Regexp (RE_String ":=")
-                  ; Dyp.Regexp (RE_String "is_symbolic")
-                  ; Dyp.Regexp (RE_Char '(')
-                  ; Dyp.Non_ter ("expr", No_priority)
-                  ; Dyp.Regexp (RE_Char ',')
-                  ; Dyp.Non_ter ("expr", No_priority)
-                  ; Dyp.Regexp (RE_Char ')') ]
-                , "default_priority"
-                , [] )
-              , fun _ -> function
-                  | [ Libparser.Syntax.Loc lval
-                    ; _
-                    ; _
-                    ; _
-                    ; Libparser.Syntax.Expr sym_var
-                    ; _
-                    ; Libparser.Syntax.Expr length
-                    ; _ ] ->
-                      ( Libparser.Syntax.Instr
-                          (IsSymbolic (lval, sym_var, length))
-                      , [] )
-                  | _ ->
-                      assert false )
+            [ ( loc_expr_expr_parser "maximize"
+              , fun _ ->
+                  loc_expr_expr_instr (fun (lval, sym_var, length) ->
+                      Maximize (lval, sym_var, length) ) )
+            ; ( loc_expr_expr_parser "minimize"
+              , fun _ ->
+                  loc_expr_expr_instr (fun (lval, sym_var, length) ->
+                      Minimize (lval, sym_var, length) ) )
+            ; ( loc_expr_expr_parser "is_symbolic"
+              , fun _ ->
+                  loc_expr_expr_instr (fun (lval, sym_var, length) ->
+                      IsSymbolic (lval, sym_var, length) ) )
             ; ( ( "fallthrough"
                 , [ Dyp.Non_ter ("loc", No_priority)
                   ; Dyp.Regexp (RE_String ":=")
