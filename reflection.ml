@@ -17,6 +17,7 @@ type Ast.Instr.t +=
 
 type builtin +=
   | IsSymbolicBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
+  | MaximizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | NewSymVarBuiltin of Dba.Var.t * Dba.Expr.t
 
 module Reflection (P : Path.S) (S : STATE) :
@@ -70,6 +71,17 @@ module Reflection (P : Path.S) (S : STATE) :
                      , Script.eval_expr sym_var env
                      , Script.eval_expr length env ) )
               ; Store {base; dir; addr; rval} ] )
+        | Maximize (lval, sym_var, length) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (MaximizeBuiltin
+                     ( var
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr length env ) ) ]
+              (* TODO handle other cases *)
+          | _ ->
+              [] )
         | NewSymVar (lval, length) -> (
           match Script.eval_loc lval env with
           | Var var ->
@@ -110,6 +122,19 @@ module Reflection (P : Path.S) (S : STATE) :
         in
         Ok new_state
 
+  let maximize dst_var sym_var length _ path _ state : (S.t, status) Result.t =
+    let sym_var, state = Eval.safe_eval sym_var state path in
+    let length, state = Eval.safe_eval length state path in
+    let length = Bitvector.to_uint (S.get_value length state) in
+    (* TODO assert length % 8 == 0 *)
+    let sym_var, state =
+      S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
+    in
+    let test = S.Value.constant (Bitvector.ones length) in
+    let rec max sym_var test = S.Value.binary Uge in
+    let res = max sym_var test in
+    Ok state
+
   let new_sym_var dst_var length _ path _ state : (S.t, status) Result.t =
     let length, state = Eval.safe_eval length state path in
     let length = Bitvector.to_uint (S.get_value length state) in
@@ -134,6 +159,8 @@ module Reflection (P : Path.S) (S : STATE) :
       (function
       | IsSymbolicBuiltin (lval, sym_var, length) ->
           Some (is_symbolic lval sym_var length)
+      | MaximizeBuiltin (lval, sym_var, length) ->
+          Some (maximize lval sym_var length)
       | NewSymVarBuiltin (lval, length) ->
           Some (new_sym_var lval length)
       | _ ->
