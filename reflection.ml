@@ -83,7 +83,7 @@ module Reflection (P : Path.S) (S : STATE) :
           | _ ->
               [] )
         | NewSymVar (lval, length) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
               [Builtin (NewSymVarBuiltin (var, Script.eval_expr length env))]
           | Restrict (var, {hi; lo}) ->
@@ -131,17 +131,33 @@ module Reflection (P : Path.S) (S : STATE) :
       S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
     in
     let test = S.Value.constant (Bitvector.ones length) in
-    let rec max sym_var test = S.Value.binary Uge in
-    let res = max sym_var test in
+    (* let rec max sym_var test = S.Value.binary Uge in *)
+    (* let res = max sym_var test in *)
     Ok state
 
-  let new_sym_var dst_var length _ path _ state : (S.t, status) Result.t =
+  let new_sym_var (dst_var : Dba.Var.t) length _ path _ state :
+      (S.t, status) Result.t =
     let length, state = Eval.safe_eval length state path in
-    let length = Bitvector.to_uint (S.get_value length state) in
-    let state =
-      (* TODO probably wrong, as I don't want to create a constant *)
-      S.assign dst_var (S.Value.constant (Bitvector.ones length)) state
+    let length_int = Bitvector.to_uint (S.get_value length state) in
+    let length = Size.Bit.create length_int in
+    (* 1. create symbolic variable; use src/dba/dba.mli Var temporary with bitsize*)
+    let tmp = Var.temp length in
+    (* 2 use Eval.fresh with this temp to create a new symbolic value *)
+    let state = Eval.fresh tmp state path in
+    (* 3. extend it to 64 bit, if lower, if greater warn and truncate *)
+    let sym_var = S.lookup tmp state in
+    let sym_var =
+      if length_int < dst_var.size then
+        S.Value.unary (Uext (dst_var.size - length_int)) sym_var (*extend*)
+      else if length_int > dst_var.size then (
+        Logger.warning
+          "Destination variable cannot hold new variable with that size. \
+           Trunacting..." ;
+        S.Value.unary (Restrict {hi= dst_var.size - 1; lo= 0}) sym_var )
+      else sym_var
     in
+    (* 4. assign intermediate to dst_var *)
+    let state = S.assign dst_var sym_var state in
     Ok state
 
   (* Perform action of builtin, so here call get_value *)
