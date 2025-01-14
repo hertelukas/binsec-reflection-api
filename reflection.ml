@@ -18,6 +18,7 @@ type Ast.Instr.t +=
 type builtin +=
   | IsSymbolicBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | MaximizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
+  | MinimizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | NewSymVarBuiltin of Dba.Var.t * Dba.Expr.t
 
 module Reflection (P : Path.S) (S : STATE) :
@@ -82,6 +83,17 @@ module Reflection (P : Path.S) (S : STATE) :
               (* TODO handle other cases *)
           | _ ->
               [] )
+        | Minimize (lval, sym_var, length) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (MinimizeBuiltin
+                     ( var
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr length env ) ) ]
+              (* TODO handle other cases *)
+          | _ ->
+              [] )
         | NewSymVar (lval, length) -> (
           match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
@@ -122,7 +134,8 @@ module Reflection (P : Path.S) (S : STATE) :
         in
         Ok new_state
 
-  let maximize dst_var sym_var length _ path _ state : (S.t, status) Result.t =
+  let max_min (max : bool) dst_var sym_var length _ path _ state :
+      (S.t, status) Result.t =
     let sym_var, state = Eval.safe_eval sym_var state path in
     let length, state = Eval.safe_eval length state path in
     let length = Bitvector.to_uint (S.get_value length state) in
@@ -133,6 +146,7 @@ module Reflection (P : Path.S) (S : STATE) :
     Logger.debug "Length is %d" length ;
     let l = Bitvector.zeros length in
     let r = Bitvector.fill length in
+    let cmp = if max then Uge else Ule in
     let rec binary_search (l : Bitvector.t) (r : Bitvector.t) state
         (sym_var : S.Value.t) =
       Logger.debug "l: %s, r: %s" (Bitvector.to_hexstring l)
@@ -142,35 +156,48 @@ module Reflection (P : Path.S) (S : STATE) :
         state )
       else if Bitvector.equal l r then (
         Logger.debug "Found value: %s" (Bitvector.to_hexstring l) ;
-        (* Found max value, however, can be the one or one lower *)
-        let assumed_bigger = S.Value.binary Uge sym_var (S.Value.constant l) in
+        (* max: found max value, however, can be the one or one lower *)
+        (* min: found min value, however, can be the one or one higher *)
+        let assumed_bigger = S.Value.binary cmp sym_var (S.Value.constant l) in
         match S.assume assumed_bigger state with
         | Some _ ->
             S.assign dst_var (S.Value.constant l) state
         | None ->
             S.assign dst_var
-              (S.Value.constant (Bitvector.sub l (Bitvector.ones length)))
+              ( if max then
+                  S.Value.constant (Bitvector.sub l (Bitvector.ones length))
+                else S.Value.constant (Bitvector.add_int l 1) )
               state )
       else
         let mid =
           (* Doing it this way avoids overflows, but is just (l + r) / 2 *)
           Bitvector.add (Bitvector.shift_right l 1) (Bitvector.shift_right r 1)
         in
-        (* Assume that sym_var bigger than our current mid exists *)
+        (* max: assume that sym_var bigger than our current mid exists *)
+        (* min: assume that sym_var smaller than our current mid exists *)
         let assumed_bigger =
-          S.Value.binary Uge sym_var (S.Value.constant mid)
+          S.Value.binary cmp sym_var (S.Value.constant mid)
         in
         match S.assume assumed_bigger state with
         | Some _ ->
-            Logger.debug "Mid too small" ;
-            (* We found something, so we can go higher *)
-            binary_search (Bitvector.add_int mid 1) r state sym_var
+            if max then (
+              Logger.debug "Mid too small" ;
+              (* We found something, so we can go higher *)
+              binary_search (Bitvector.add_int mid 1) r state sym_var )
+            else (
+              Logger.debug "" ;
+              (* We found something, so our mid is too high *)
+              binary_search l
+                (Bitvector.sub mid (Bitvector.ones length))
+                state sym_var )
         | None ->
-            Logger.debug "Mid too high" ;
-            (* We found nothing, so our mid is too high *)
-            binary_search l
-              (Bitvector.sub mid (Bitvector.ones length))
-              state sym_var
+            if max then (
+              Logger.debug "Mid too high" ;
+              (* We found nothing, so our mid is too high *)
+              binary_search l
+                (Bitvector.sub mid (Bitvector.ones length))
+                state sym_var )
+            else binary_search (Bitvector.add_int mid 1) r state sym_var
     in
     let state = binary_search l r state sym_var in
     Ok state
@@ -216,7 +243,9 @@ module Reflection (P : Path.S) (S : STATE) :
       | IsSymbolicBuiltin (lval, sym_var, length) ->
           Some (is_symbolic lval sym_var length)
       | MaximizeBuiltin (lval, sym_var, length) ->
-          Some (maximize lval sym_var length)
+          Some (max_min true lval sym_var length)
+      | MinimizeBuiltin (lval, sym_var, length) ->
+          Some (max_min false lval sym_var length)
       | NewSymVarBuiltin (lval, length) ->
           Some (new_sym_var lval length)
       | _ ->

@@ -5,6 +5,7 @@
 ** binsec -sse -isa amd64 -reflection -sse-script config.ini config.snapshot
 */
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -17,19 +18,17 @@ int main() {
   // Unconstrained
   printf("%zx", minimize(sym_var, 64));
 
-  // Else if, so we do not analyze combinations of if statements
-  if (*(size_t *)sym_var == 0) {
-    // Here, we can only have the solution 0
+  if (*(size_t *)sym_var == UINT64_MAX) {
     printf("%zx", minimize(sym_var, 64));
   } else if ((*(size_t *)sym_var) * 2 < 1) {
-    // This returns 0x8000000000000000, as 2 * that = 0
     printf("%zx", minimize(sym_var, 64));
-  } else if (*(size_t *)sym_var < 0x7FFFFFFF) {
-    // And step through a couple of adjacent numbers
+  } else if (*(size_t *)sym_var > 0x80000001) {
     printf("%zx", minimize(sym_var, 64));
-  } else if (*(size_t *)sym_var < 0x80000000) {
+  } else if (*(size_t *)sym_var > 0x80000000) {
     printf("%zx", minimize(sym_var, 64));
-  } else if (*(size_t *)sym_var < 0x80000001) {
+  } else if (*(size_t *)sym_var > 0x7fffffff) {
+    printf("%zx", minimize(sym_var, 64));
+  } else if (*(size_t *)sym_var > 0x7ffffffe) {
     printf("%zx", minimize(sym_var, 64));
   }
 }
