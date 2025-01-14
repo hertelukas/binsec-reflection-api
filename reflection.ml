@@ -130,32 +130,39 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var, state =
       S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
     in
-    Logger.info "Length is %d" length ;
+    Logger.debug "Length is %d" length ;
     let l = Bitvector.zeros length in
     let r = Bitvector.fill length in
     let rec binary_search (l : Bitvector.t) (r : Bitvector.t) state
         (sym_var : S.Value.t) =
-      if l > r then (
+      Logger.debug "l: %s, r: %s" (Bitvector.to_hexstring l)
+        (Bitvector.to_hexstring r) ;
+      if Bitvector.ugt l r then (
         Logger.error "No value found" ;
         state )
-      else if l == r then
+      else if Bitvector.equal l r then (
+        Logger.debug "Found value: %s" (Bitvector.to_hexstring l) ;
         (* Found max value *)
-        S.assign dst_var (S.Value.constant l) state
+        S.assign dst_var (S.Value.constant l) state )
       else
-        let mid = Bitvector.shift_right (Bitvector.add l r) 1 in
+        let mid =
+          Bitvector.add (Bitvector.shift_right l 1) (Bitvector.shift_right r 1)
+        in
         (* Assume that sym_var bigger than our current mid exists *)
         let assumed_bigger =
           S.Value.binary Uge sym_var (S.Value.constant mid)
         in
         match S.assume assumed_bigger state with
         | Some s ->
-            Logger.info "Mid too small" ;
+            Logger.debug "Mid too small" ;
             (* We found something, so we can go higher *)
-            binary_search mid r state sym_var
+            binary_search (Bitvector.add_int mid 1) r state sym_var
         | None ->
-            Logger.info "Mid too high" ;
+            Logger.debug "Mid too high" ;
             (* We found nothing, so our mid is too high *)
-            binary_search l mid state sym_var
+            binary_search l
+              (Bitvector.sub mid (Bitvector.ones length))
+              state sym_var
     in
     let state = binary_search l r state sym_var in
     Ok state
