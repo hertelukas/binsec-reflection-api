@@ -142,10 +142,18 @@ module Reflection (P : Path.S) (S : STATE) :
         state )
       else if Bitvector.equal l r then (
         Logger.debug "Found value: %s" (Bitvector.to_hexstring l) ;
-        (* Found max value *)
-        S.assign dst_var (S.Value.constant l) state )
+        (* Found max value, however, can be the one or one lower *)
+        let assumed_bigger = S.Value.binary Uge sym_var (S.Value.constant l) in
+        match S.assume assumed_bigger state with
+        | Some _ ->
+            S.assign dst_var (S.Value.constant l) state
+        | None ->
+            S.assign dst_var
+              (S.Value.constant (Bitvector.sub l (Bitvector.ones length)))
+              state )
       else
         let mid =
+          (* Doing it this way avoids overflows, but is just (l + r) / 2 *)
           Bitvector.add (Bitvector.shift_right l 1) (Bitvector.shift_right r 1)
         in
         (* Assume that sym_var bigger than our current mid exists *)
@@ -153,7 +161,7 @@ module Reflection (P : Path.S) (S : STATE) :
           S.Value.binary Uge sym_var (S.Value.constant mid)
         in
         match S.assume assumed_bigger state with
-        | Some s ->
+        | Some _ ->
             Logger.debug "Mid too small" ;
             (* We found something, so we can go higher *)
             binary_search (Bitvector.add_int mid 1) r state sym_var
