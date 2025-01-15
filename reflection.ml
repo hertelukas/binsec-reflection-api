@@ -10,12 +10,14 @@ include Cli.Make (struct
 end)
 
 type Ast.Instr.t +=
+  | IsSat of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
   | IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | Maximize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | Minimize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | NewSymVar of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
 
 type builtin +=
+  | IsSatBuiltin of Dba.Var.t * Dba.Expr.t
   | IsSymbolicBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | MaximizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | MinimizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
@@ -40,6 +42,13 @@ module Reflection (P : Path.S) (S : STATE) :
     Some
       (fun inst env ->
         match inst with
+        | IsSat (lval, cnstr) -> (
+          match Script.eval_loc ~size:1 lval env with
+          | Var var ->
+              [Builtin (IsSatBuiltin (var, Script.eval_expr cnstr env))]
+              (* TODO *)
+          | _ ->
+              [] )
         | IsSymbolic (lval, sym_var, length) -> (
           match Script.eval_loc ~size:1 lval env with
           | Var var ->
@@ -227,6 +236,10 @@ module Reflection (P : Path.S) (S : STATE) :
     let state = S.assign dst_var sym_var state in
     Ok state
 
+  let is_sat (dst_var : Dba.Var.t) cnstr _ path _ state : (S.t, status) Result.t
+      =
+    Ok state
+
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
      (Virtual_address.t ->
@@ -240,6 +253,8 @@ module Reflection (P : Path.S) (S : STATE) :
   let builtin_callback =
     Some
       (function
+      | IsSatBuiltin (lval, cnstr) ->
+          Some (is_sat lval cnstr)
       | IsSymbolicBuiltin (lval, sym_var, length) ->
           Some (is_symbolic lval sym_var length)
       | MaximizeBuiltin (lval, sym_var, length) ->
@@ -337,14 +352,31 @@ let () =
                     ; _ ] ->
                       (Libparser.Syntax.Instr (NewSymVar (lval, length)), [])
                   | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "is_sat")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; __
+                    ; _
+                    ; Libparser.Syntax.Expr cnstr
+                    ; _ ] ->
+                      (Libparser.Syntax.Instr (IsSat (lval, cnstr)), [])
+                  | _ ->
                       assert false ) ] ]
 
       let instruction_printer = None
 
       let declaration_printer = None
 
-      let extension :
-          type a b.
+      let extension : type a b.
              (module EXPLORATION_STATISTICS)
           -> (module Path.S with type t = a)
           -> (module STATE with type t = b)
