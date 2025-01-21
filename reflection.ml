@@ -238,7 +238,19 @@ module Reflection (P : Path.S) (S : STATE) :
 
   let is_sat (dst_var : Dba.Var.t) cnstr _ path _ state : (S.t, status) Result.t
       =
-    Ok state
+    let cnstr, state = Eval.safe_eval cnstr state path in
+    match S.assume cnstr state with
+    | Some s ->
+        (* Value is_satisfiable *)
+        Ok
+          (S.assign dst_var
+             (S.Value.constant (Bitvector.ones dst_var.size))
+             state )
+    | _ ->
+        Ok
+          (S.assign dst_var
+             (S.Value.constant (Bitvector.zeros dst_var.size))
+             state )
 
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->

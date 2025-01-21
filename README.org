@@ -9,7 +9,7 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 #+end_src
 
 * Primitives
-** Core Reflection Primitives [5/13]
+** Core Reflection Primitives [6/13]
 - [ ] ~void error(char *msg);~
   + As builtin
   + See new_sym_var_named
@@ -33,7 +33,7 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 - [ ] ~symbolic new_sym_var_named(char* name, size_t length);~
   + Also as builtin
 - [ ] ~symbolic new_sym_var_array(char* name, size_t index, size_t size);~
-- [ ] ~int is_sat(cnstr_t cnstr);~
+- [X] ~int is_sat(cnstr_t cnstr);~
   + Also as builtin, evaluate constraint
   + State.assume, if returns some, true; none, false
 - [X] ~void assume(cnstr_t cnstr);~
