@@ -15,6 +15,7 @@ type Ast.Instr.t +=
   | Maximize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | Minimize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | NewSymVar of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
+  | PrintConstaint of Ast.Expr.t Ast.loc
 
 type builtin +=
   | IsSatBuiltin of Dba.Var.t * Dba.Expr.t
@@ -22,6 +23,7 @@ type builtin +=
   | MaximizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | MinimizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | NewSymVarBuiltin of Dba.Var.t * Dba.Expr.t
+  | PrintConstaintBuiltin of Dba.Expr.t
 
 module Reflection (P : Path.S) (S : STATE) :
   Exec.EXTENSION with type path = P.t and type state = S.t = struct
@@ -111,6 +113,8 @@ module Reflection (P : Path.S) (S : STATE) :
               [] (* TODO *)
           | Store (bytes, dir, addr, base) ->
               [] (* TODO *) )
+        | PrintConstaint cnstr ->
+            [Builtin (PrintConstaintBuiltin (Script.eval_expr cnstr env))]
         | _ ->
             [] )
 
@@ -239,6 +243,7 @@ module Reflection (P : Path.S) (S : STATE) :
   let is_sat (dst_var : Dba.Var.t) cnstr _ path _ state : (S.t, status) Result.t
       =
     let cnstr, state = Eval.safe_eval cnstr state path in
+    (* TODO What I really want to assume is if cnstr is zero *)
     match S.assume cnstr state with
     | Some s ->
         (* Value is_satisfiable *)
@@ -251,6 +256,11 @@ module Reflection (P : Path.S) (S : STATE) :
           (S.assign dst_var
              (S.Value.constant (Bitvector.zeros dst_var.size))
              state )
+
+  let print_constraint cnstr _ path _ state : (S.t, status) Result.t =
+    let cnstr, state = Eval.safe_eval cnstr state path in
+    Logger.info "%a" (S.pp_smt (Some [(cnstr, "my_constaint")])) state ;
+    Ok state
 
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
@@ -275,6 +285,8 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (max_min false lval sym_var length)
       | NewSymVarBuiltin (lval, length) ->
           Some (new_sym_var lval length)
+      | PrintConstaintBuiltin cnstr ->
+          Some (print_constraint cnstr)
       | _ ->
           None )
 
@@ -381,6 +393,18 @@ let () =
                     ; Libparser.Syntax.Expr cnstr
                     ; _ ] ->
                       (Libparser.Syntax.Instr (IsSat (lval, cnstr)), [])
+                  | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
+                , [ Dyp.Regexp (RE_String "print_constraint")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [_; Libparser.Syntax.Expr cnstr; _] ->
+                      (Libparser.Syntax.Instr (PrintConstaint cnstr), [])
                   | _ ->
                       assert false ) ] ]
 
