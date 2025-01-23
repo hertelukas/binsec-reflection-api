@@ -243,8 +243,11 @@ module Reflection (P : Path.S) (S : STATE) :
   let is_sat (dst_var : Dba.Var.t) cnstr _ path _ state : (S.t, status) Result.t
       =
     let cnstr, state = Eval.safe_eval cnstr state path in
-    (* TODO What I really want to assume is if cnstr is zero *)
-    match S.assume cnstr state with
+    let assume_true =
+      (* Not sure if I can compare unequally sized values though *)
+      S.Value.binary Eq cnstr (S.Value.constant Bitvector.one)
+    in
+    match S.assume assume_true state with
     | Some s ->
         (* Value is_satisfiable *)
         Ok
