@@ -16,6 +16,26 @@ type Ast.Instr.t +=
   | Minimize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | NewSymVar of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
   | PrintConstaint of Ast.Expr.t Ast.loc
+  | Solver_Or of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | Solver_And of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | Solver_Generic of
+      Ast.Loc.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * binary operator
+  | Solver_Ite of
+      Ast.Loc.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+  | Solver_Ite_Var of
+      Ast.Loc.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
 
 type builtin +=
   | IsSatBuiltin of Dba.Var.t * Dba.Expr.t
@@ -317,6 +337,22 @@ let () =
         , "default_priority"
         , [] )
 
+      (* Build parser for l:=func(arg1, arg2, arg3) *)
+      let loc_expr_expr_expr_parser func_name =
+        ( "fallthrough"
+        , [ Dyp.Non_ter ("loc", No_priority)
+          ; Dyp.Regexp (RE_String ":=")
+          ; Dyp.Regexp (RE_String func_name)
+          ; Dyp.Regexp (RE_Char '(')
+          ; Dyp.Non_ter ("expr", No_priority)
+          ; Dyp.Regexp (RE_Char ',')
+          ; Dyp.Non_ter ("expr", No_priority)
+          ; Dyp.Regexp (RE_Char ',')
+          ; Dyp.Non_ter ("expr", No_priority)
+          ; Dyp.Regexp (RE_Char ')') ]
+        , "default_priority"
+        , [] )
+
       (* Applies instr to l = (arg1, arg2) *)
       let loc_expr_expr_instr instr = function
         | [ Libparser.Syntax.Loc lval
@@ -331,6 +367,22 @@ let () =
         | _ ->
             assert false
 
+      (* Applies instr to l = (arg1, arg2, arg3) *)
+      let loc_expr_expr_expr_instr instr = function
+        | [ Libparser.Syntax.Loc lval
+          ; _
+          ; _
+          ; _
+          ; Libparser.Syntax.Expr arg1
+          ; _
+          ; Libparser.Syntax.Expr arg2
+          ; _
+          ; Libparser.Syntax.Expr arg3
+          ; _ ] ->
+            (Libparser.Syntax.Instr (instr (lval, arg1, arg2, arg3)), [])
+        | _ ->
+            assert false
+
       (* sse/plugin/checkct
 
            in sse/types, check if get_value raises excpetion -> symbolic
@@ -341,7 +393,7 @@ let () =
             String("is_symbolic")
             char('(')
             Toke("arg")
-            char(')')
+            cha')')
 
          type Ast.Instr.t += ...Will call script function IsSymbolic of Lvalue.t.loc * Expr.t loc <- loc is to identify which line caused the error
 
@@ -349,7 +401,8 @@ let () =
       *)
       let grammar_extension =
         [ Dyp.Add_rules
-            [ ( loc_expr_expr_parser "maximize"
+            [ (* Core Reflection Primitives *)
+              ( loc_expr_expr_parser "maximize"
               , fun _ ->
                   loc_expr_expr_instr (fun (lval, sym_var, length) ->
                       Maximize (lval, sym_var, length) ) )
@@ -408,6 +461,107 @@ let () =
               , fun _ -> function
                   | [_; Libparser.Syntax.Expr cnstr; _] ->
                       (Libparser.Syntax.Instr (PrintConstaint cnstr), [])
+                  | _ ->
+                      assert false )
+              (* Constraint primitives *)
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "_solver_NOT")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; __
+                    ; _
+                    ; Libparser.Syntax.Expr cnstr
+                    ; _ ] ->
+                      (Libparser.Syntax.Instr (IsSat (lval, cnstr)), [])
+                  | _ ->
+                      assert false )
+            ; ( loc_expr_expr_parser "_solver_OR"
+              , fun _ ->
+                  loc_expr_expr_instr (fun (lval, cnstr1, cnstr2) ->
+                      Solver_Or (lval, cnstr1, cnstr2) ) )
+            ; ( loc_expr_expr_parser "_solver_AND"
+              , fun _ ->
+                  loc_expr_expr_instr (fun (lval, cnstr1, cnstr2) ->
+                      Solver_And (lval, cnstr1, cnstr2) ) )
+            ; ( loc_expr_expr_expr_parser "_solver_EQ"
+              , fun _ ->
+                  loc_expr_expr_expr_instr
+                    (fun (lval, sym_var, sym_var2, length) ->
+                      Solver_Generic (lval, sym_var, sym_var2, length, Eq) ) )
+              (* TODO, this currently just does equals *)
+            ; ( loc_expr_expr_expr_parser "_solver_NEQ"
+              , fun _ ->
+                  loc_expr_expr_expr_instr
+                    (fun (lval, sym_var, sym_var2, length) ->
+                      Solver_Generic (lval, sym_var, sym_var2, length, Eq) ) )
+            ; ( loc_expr_expr_expr_parser "_solver_LT"
+              , fun _ ->
+                  loc_expr_expr_expr_instr
+                    (fun (lval, sym_var, sym_var2, length) ->
+                      Solver_Generic (lval, sym_var, sym_var2, length, Ult) ) )
+            ; ( loc_expr_expr_expr_parser "_solver_LE"
+              , fun _ ->
+                  loc_expr_expr_expr_instr
+                    (fun (lval, sym_var, sym_var2, length) ->
+                      Solver_Generic (lval, sym_var, sym_var2, length, Ule) ) )
+            ; ( loc_expr_expr_expr_parser "_solver_SLT"
+              , fun _ ->
+                  loc_expr_expr_expr_instr
+                    (fun (lval, sym_var, sym_var2, length) ->
+                      Solver_Generic (lval, sym_var, sym_var2, length, Slt) ) )
+            ; ( loc_expr_expr_expr_parser "_solver_SLE"
+              , fun _ ->
+                  loc_expr_expr_expr_instr
+                    (fun (lval, sym_var, sym_var2, length) ->
+                      Solver_Generic (lval, sym_var, sym_var2, length, Sle) ) )
+            ; ( loc_expr_expr_expr_parser "_solver_ITE"
+              , fun _ ->
+                  loc_expr_expr_expr_instr (fun (lval, cond, cnstr1, cnstr2) ->
+                      Solver_Ite (lval, cond, cnstr1, cnstr2) ) )
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "_solver_ITE_VAR")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; _
+                    ; _
+                    ; _
+                    ; Libparser.Syntax.Expr cond
+                    ; _
+                    ; Libparser.Syntax.Expr sym_var
+                    ; _
+                    ; Libparser.Syntax.Expr sym_var2
+                    ; _
+                    ; Libparser.Syntax.Expr length1
+                    ; _
+                    ; Libparser.Syntax.Expr length2
+                    ; _ ] ->
+                      ( Libparser.Syntax.Instr
+                          (Solver_Ite_Var
+                             (lval, cond, sym_var, sym_var2, length1, length2)
+                          )
+                      , [] )
                   | _ ->
                       assert false ) ] ]
 
