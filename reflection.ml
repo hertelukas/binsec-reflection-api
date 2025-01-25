@@ -44,6 +44,8 @@ type builtin +=
   | MinimizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | NewSymVarBuiltin of Dba.Var.t * Dba.Expr.t
   | PrintConstaintBuiltin of Dba.Expr.t
+  | SolverOrBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
+  | SolverAndBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | SolverGenericBuiltin of
       Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * binary operator
 
@@ -131,12 +133,32 @@ module Reflection (P : Path.S) (S : STATE) :
           match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
               [Builtin (NewSymVarBuiltin (var, Script.eval_expr length env))]
-          | Restrict (var, {hi; lo}) ->
-              [] (* TODO *)
-          | Store (bytes, dir, addr, base) ->
+          | _ ->
               [] (* TODO *) )
         | PrintConstaint cnstr ->
             [Builtin (PrintConstaintBuiltin (Script.eval_expr cnstr env))]
+        | SolverAnd (lval, cnstr1, cnstr2) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (SolverAndBuiltin
+                     ( var
+                     , Script.eval_expr cnstr1 env
+                     , Script.eval_expr cnstr2 env ) ) ]
+              (* TODO*)
+          | _ ->
+              [] )
+        | SolverOr (lval, cnstr1, cnstr2) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (SolverOrBuiltin
+                     ( var
+                     , Script.eval_expr cnstr1 env
+                     , Script.eval_expr cnstr2 env ) ) ]
+              (* TODO*)
+          | _ ->
+              [] )
         | SolverGeneric (lval, sym_var, sym_var2, length, op) -> (
           match Script.eval_loc lval env with
           | Var var ->
@@ -283,7 +305,7 @@ module Reflection (P : Path.S) (S : STATE) :
       S.Value.binary Eq cnstr (S.Value.constant Bitvector.one)
     in
     match S.assume assume_true state with
-    | Some s ->
+    | Some _ ->
         (* Value is_satisfiable *)
         Ok
           (S.assign dst_var
@@ -300,6 +322,20 @@ module Reflection (P : Path.S) (S : STATE) :
     Logger.info "%a" (S.pp_smt (Some [(cnstr, "my_constaint")])) state ;
     Ok state
 
+  let solver_and_or (dst_var : Dba.Var.t) cnstr1 cnstr2 op _ path _ state :
+      (S.t, status) Result.t =
+    let cnstr1, state = Eval.safe_eval cnstr1 state path in
+    let cnstr2, state = Eval.safe_eval cnstr2 state path in
+    let assumption = S.Value.binary op cnstr1 cnstr2 in
+    (* TODO check if this is correct *)
+    Ok
+      (( match S.assume assumption state with
+       | Some _ ->
+           S.assign dst_var (S.Value.constant (Bitvector.ones dst_var.size))
+       | None ->
+           S.assign dst_var (S.Value.constant (Bitvector.zeros dst_var.size)) )
+         state )
+
   let solver_generic (dst_var : Dba.Var.t) sym_var sym_var2 length op _ path _
       state : (S.t, status) Result.t =
     let sym_var, state = Eval.safe_eval sym_var state path in
@@ -315,7 +351,7 @@ module Reflection (P : Path.S) (S : STATE) :
     let assumption = S.Value.binary op sym_var sym_var2 in
     (* TODO check if this is correct *)
     match S.assume assumption state with
-    | Some state ->
+    | Some _ ->
         Ok
           (S.assign dst_var
              (S.Value.constant (Bitvector.ones dst_var.size))
@@ -351,6 +387,10 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (new_sym_var lval length)
       | PrintConstaintBuiltin cnstr ->
           Some (print_constraint cnstr)
+      | SolverAndBuiltin (lval, cnstr1, cnstr2) ->
+          Some (solver_and_or lval cnstr1 cnstr2 And)
+      | SolverOrBuiltin (lval, cnstr1, cnstr2) ->
+          Some (solver_and_or lval cnstr1 cnstr2 Or)
       | SolverGenericBuiltin (lval, sym_var, sym_var2, length, op) ->
           Some (solver_generic lval sym_var sym_var2 length op)
       | _ ->
