@@ -29,7 +29,7 @@ type Ast.Instr.t +=
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
-  | SolverIte_Var of
+  | SolverIteVar of
       Ast.Loc.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
@@ -48,6 +48,7 @@ type builtin +=
   | SolverAndBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | SolverGenericBuiltin of
       Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * binary operator
+  | SolverIteBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
 
 module Reflection (P : Path.S) (S : STATE) :
   Exec.EXTENSION with type path = P.t and type state = S.t = struct
@@ -171,6 +172,18 @@ module Reflection (P : Path.S) (S : STATE) :
                      , op ) ) ]
           | _ ->
               (* TODO *)
+              [] )
+        | SolverIte (lval, cond, cnstr1, cnstr2) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (SolverIteBuiltin
+                     ( var
+                     , Script.eval_expr cond env
+                     , Script.eval_expr cnstr1 env
+                     , Script.eval_expr cnstr2 env ) ) ]
+              (* TODO *)
+          | _ ->
               [] )
         | _ ->
             [] )
@@ -362,6 +375,19 @@ module Reflection (P : Path.S) (S : STATE) :
              (S.Value.constant (Bitvector.zeros dst_var.size))
              state )
 
+  let solver_ite dst_var cond cnstr1 cnstr2 _ path _ state :
+      (S.t, status) Result.t =
+    let cond, state = Eval.safe_eval cond state path in
+    let cnstr1, state = Eval.safe_eval cnstr1 state path in
+    let cnstr2, state = Eval.safe_eval cnstr2 state path in
+    (* TODO check if this is correct *)
+    Ok
+      ( match S.assume cond state with
+      | Some _ ->
+          S.assign dst_var cnstr1 state
+      | None ->
+          S.assign dst_var cnstr2 state )
+
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
      (Virtual_address.t ->
@@ -393,6 +419,8 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (solver_and_or lval cnstr1 cnstr2 Or)
       | SolverGenericBuiltin (lval, sym_var, sym_var2, length, op) ->
           Some (solver_generic lval sym_var sym_var2 length op)
+      | SolverIteBuiltin (lval, cond, cnstr1, cnstr2) ->
+          Some (solver_ite lval cond cnstr1 cnstr2)
       | _ ->
           None )
 
@@ -641,7 +669,7 @@ let () =
                     ; Libparser.Syntax.Expr length2
                     ; _ ] ->
                       ( Libparser.Syntax.Instr
-                          (SolverIte_Var
+                          (SolverIteVar
                              (lval, cond, sym_var, sym_var2, length1, length2)
                           )
                       , [] )
