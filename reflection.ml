@@ -16,20 +16,20 @@ type Ast.Instr.t +=
   | Minimize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | NewSymVar of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
   | PrintConstaint of Ast.Expr.t Ast.loc
-  | Solver_Or of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
-  | Solver_And of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
-  | Solver_Generic of
+  | SolverOr of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | SolverAnd of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | SolverGeneric of
       Ast.Loc.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
       * binary operator
-  | Solver_Ite of
+  | SolverIte of
       Ast.Loc.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
-  | Solver_Ite_Var of
+  | SolverIte_Var of
       Ast.Loc.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
@@ -485,46 +485,46 @@ let () =
             ; ( loc_expr_expr_parser "_solver_OR"
               , fun _ ->
                   loc_expr_expr_instr (fun (lval, cnstr1, cnstr2) ->
-                      Solver_Or (lval, cnstr1, cnstr2) ) )
+                      SolverOr (lval, cnstr1, cnstr2) ) )
             ; ( loc_expr_expr_parser "_solver_AND"
               , fun _ ->
                   loc_expr_expr_instr (fun (lval, cnstr1, cnstr2) ->
-                      Solver_And (lval, cnstr1, cnstr2) ) )
+                      SolverAnd (lval, cnstr1, cnstr2) ) )
             ; ( loc_expr_expr_expr_parser "_solver_EQ"
               , fun _ ->
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, sym_var2, length) ->
-                      Solver_Generic (lval, sym_var, sym_var2, length, Eq) ) )
+                      SolverGeneric (lval, sym_var, sym_var2, length, Eq) ) )
               (* TODO, this currently just does equals *)
             ; ( loc_expr_expr_expr_parser "_solver_NEQ"
               , fun _ ->
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, sym_var2, length) ->
-                      Solver_Generic (lval, sym_var, sym_var2, length, Eq) ) )
+                      SolverGeneric (lval, sym_var, sym_var2, length, Eq) ) )
             ; ( loc_expr_expr_expr_parser "_solver_LT"
               , fun _ ->
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, sym_var2, length) ->
-                      Solver_Generic (lval, sym_var, sym_var2, length, Ult) ) )
+                      SolverGeneric (lval, sym_var, sym_var2, length, Ult) ) )
             ; ( loc_expr_expr_expr_parser "_solver_LE"
               , fun _ ->
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, sym_var2, length) ->
-                      Solver_Generic (lval, sym_var, sym_var2, length, Ule) ) )
+                      SolverGeneric (lval, sym_var, sym_var2, length, Ule) ) )
             ; ( loc_expr_expr_expr_parser "_solver_SLT"
               , fun _ ->
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, sym_var2, length) ->
-                      Solver_Generic (lval, sym_var, sym_var2, length, Slt) ) )
+                      SolverGeneric (lval, sym_var, sym_var2, length, Slt) ) )
             ; ( loc_expr_expr_expr_parser "_solver_SLE"
               , fun _ ->
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, sym_var2, length) ->
-                      Solver_Generic (lval, sym_var, sym_var2, length, Sle) ) )
+                      SolverGeneric (lval, sym_var, sym_var2, length, Sle) ) )
             ; ( loc_expr_expr_expr_parser "_solver_ITE"
               , fun _ ->
                   loc_expr_expr_expr_instr (fun (lval, cond, cnstr1, cnstr2) ->
-                      Solver_Ite (lval, cond, cnstr1, cnstr2) ) )
+                      SolverIte (lval, cond, cnstr1, cnstr2) ) )
             ; ( ( "fallthrough"
                 , [ Dyp.Non_ter ("loc", No_priority)
                   ; Dyp.Regexp (RE_String ":=")
@@ -558,7 +558,7 @@ let () =
                     ; Libparser.Syntax.Expr length2
                     ; _ ] ->
                       ( Libparser.Syntax.Instr
-                          (Solver_Ite_Var
+                          (SolverIte_Var
                              (lval, cond, sym_var, sym_var2, length1, length2)
                           )
                       , [] )
