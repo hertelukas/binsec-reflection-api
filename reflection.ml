@@ -44,6 +44,8 @@ type builtin +=
   | MinimizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | NewSymVarBuiltin of Dba.Var.t * Dba.Expr.t
   | PrintConstaintBuiltin of Dba.Expr.t
+  | SolverGenericBuiltin of
+      Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * binary operator
 
 module Reflection (P : Path.S) (S : STATE) :
   Exec.EXTENSION with type path = P.t and type state = S.t = struct
@@ -135,6 +137,19 @@ module Reflection (P : Path.S) (S : STATE) :
               [] (* TODO *) )
         | PrintConstaint cnstr ->
             [Builtin (PrintConstaintBuiltin (Script.eval_expr cnstr env))]
+        | SolverGeneric (lval, sym_var, sym_var2, length, op) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (SolverGenericBuiltin
+                     ( var
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr sym_var2 env
+                     , Script.eval_expr length env
+                     , op ) ) ]
+          | _ ->
+              (* TODO *)
+              [] )
         | _ ->
             [] )
 
@@ -285,6 +300,32 @@ module Reflection (P : Path.S) (S : STATE) :
     Logger.info "%a" (S.pp_smt (Some [(cnstr, "my_constaint")])) state ;
     Ok state
 
+  let solver_generic (dst_var : Dba.Var.t) sym_var sym_var2 length op _ path _
+      state : (S.t, status) Result.t =
+    let sym_var, state = Eval.safe_eval sym_var state path in
+    let sym_var2, state = Eval.safe_eval sym_var2 state path in
+    let length, state = Eval.safe_eval length state path in
+    let length = Bitvector.to_uint (S.get_value length state) in
+    let sym_var, state =
+      S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
+    in
+    let sym_var2, state =
+      S.read ~addr:sym_var2 (length / 8) Machine.LittleEndian state
+    in
+    let assumption = S.Value.binary op sym_var sym_var2 in
+    (* TODO check if this is correct *)
+    match S.assume assumption state with
+    | Some state ->
+        Ok
+          (S.assign dst_var
+             (S.Value.constant (Bitvector.ones dst_var.size))
+             state )
+    | None ->
+        Ok
+          (S.assign dst_var
+             (S.Value.constant (Bitvector.zeros dst_var.size))
+             state )
+
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
      (Virtual_address.t ->
@@ -310,6 +351,8 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (new_sym_var lval length)
       | PrintConstaintBuiltin cnstr ->
           Some (print_constraint cnstr)
+      | SolverGenericBuiltin (lval, sym_var, sym_var2, length, op) ->
+          Some (solver_generic lval sym_var sym_var2 length op)
       | _ ->
           None )
 
