@@ -10,6 +10,7 @@ include Cli.Make (struct
 end)
 
 type Ast.Instr.t +=
+  | PrintError of Ast.Expr.t Ast.loc
   | IsSat of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
   | IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | Maximize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
@@ -38,6 +39,7 @@ type Ast.Instr.t +=
       * Ast.Expr.t Ast.loc
 
 type builtin +=
+  | ErrorBuiltin of Dba.Expr.t
   | IsSatBuiltin of Dba.Var.t * Dba.Expr.t
   | IsSymbolicBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | MaximizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
@@ -69,6 +71,8 @@ module Reflection (P : Path.S) (S : STATE) :
     Some
       (fun inst env ->
         match inst with
+        | PrintError msg ->
+            [Builtin (ErrorBuiltin (Script.eval_expr msg env))]
         | IsSat (lval, cnstr) -> (
           match Script.eval_loc ~size:1 lval env with
           | Var var ->
@@ -189,6 +193,10 @@ module Reflection (P : Path.S) (S : STATE) :
             [] )
 
   let process_callback = None
+
+  let error msg _ path _ state : (S.t, status) Result.t =
+    (* TODO how can I load the string from memory? *)
+    Logger.error "Error:" ; Error Die
 
   let is_symbolic dst_var sym_var length _ path _ state : (S.t, status) Result.t
       =
@@ -401,6 +409,8 @@ module Reflection (P : Path.S) (S : STATE) :
   let builtin_callback =
     Some
       (function
+      | ErrorBuiltin msg ->
+          Some (error msg)
       | IsSatBuiltin (lval, cnstr) ->
           Some (is_sat lval cnstr)
       | IsSymbolicBuiltin (lval, sym_var, length) ->
@@ -513,7 +523,19 @@ let () =
       let grammar_extension =
         [ Dyp.Add_rules
             [ (* Core Reflection Primitives *)
-              ( loc_expr_expr_parser "maximize"
+              ( ( "fallthrough"
+                , [ Dyp.Regexp (RE_String "error")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [_; Libparser.Syntax.Expr msg; _] ->
+                      (Libparser.Syntax.Instr (PrintError msg), [])
+                  | _ ->
+                      assert false )
+            ; ( loc_expr_expr_parser "maximize"
               , fun _ ->
                   loc_expr_expr_instr (fun (lval, sym_var, length) ->
                       Maximize (lval, sym_var, length) ) )
