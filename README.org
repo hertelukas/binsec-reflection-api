@@ -9,7 +9,7 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 #+end_src
 
 * Primitives
-** Core Reflection Primitives [7/13]
+** Core Reflection Primitives [8/13]
 - [ ] ~void error(char *msg);~
   + As builtin
   + See new_sym_var_named
@@ -19,7 +19,7 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
   + Use state.assertion to get list of every assertion
   + Create and of all expressions
   + Extend to size of container
-- [ ] ~void print_byte(char byte);~
+- [X] ~void print_byte(char byte);~
 - [X] ~void print_constraint(cnstr_t cnstr);~
 - [X] ~size_t maximize(void* sym_var, size_t length);~
   + Find biggest value that is possible

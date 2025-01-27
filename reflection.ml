@@ -10,13 +10,14 @@ include Cli.Make (struct
 end)
 
 type Ast.Instr.t +=
-  | PrintError of Ast.Expr.t Ast.loc
   | IsSat of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
   | IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | Maximize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | Minimize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | NewSymVar of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
+  | PrintByte of Ast.Expr.t Ast.loc
   | PrintConstaint of Ast.Expr.t Ast.loc
+  | PrintError of Ast.Expr.t Ast.loc
   | SolverOr of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | SolverAnd of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | SolverGeneric of
@@ -45,6 +46,7 @@ type builtin +=
   | MaximizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | MinimizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | NewSymVarBuiltin of Dba.Var.t * Dba.Expr.t
+  | PrintByteBuiltin of Dba.Expr.t
   | PrintConstaintBuiltin of Dba.Expr.t
   | SolverOrBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | SolverAndBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
@@ -142,6 +144,8 @@ module Reflection (P : Path.S) (S : STATE) :
               [] (* TODO *) )
         | PrintConstaint cnstr ->
             [Builtin (PrintConstaintBuiltin (Script.eval_expr cnstr env))]
+        | PrintByte byte ->
+            [Builtin (PrintByteBuiltin (Script.eval_expr byte env))]
         | SolverAnd (lval, cnstr1, cnstr2) -> (
           match Script.eval_loc lval env with
           | Var var ->
@@ -343,6 +347,12 @@ module Reflection (P : Path.S) (S : STATE) :
     Logger.info "%a" (S.pp_smt (Some [(cnstr, "my_constaint")])) state ;
     Ok state
 
+  (* TODO check if correct *)
+  let print_byte byte _ path _ state : (S.t, status) Result.t =
+    let byte, state = Eval.safe_eval byte state path in
+    Logger.info "%a" (S.pp_smt (Some [(byte, "my_byte")])) state ;
+    Ok state
+
   let solver_and_or (dst_var : Dba.Var.t) cnstr1 cnstr2 op _ path _ state :
       (S.t, status) Result.t =
     let cnstr1, state = Eval.safe_eval cnstr1 state path in
@@ -423,6 +433,8 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (new_sym_var lval length)
       | PrintConstaintBuiltin cnstr ->
           Some (print_constraint cnstr)
+      | PrintByteBuiltin byte ->
+          Some (print_byte byte)
       | SolverAndBuiltin (lval, cnstr1, cnstr2) ->
           Some (solver_and_or lval cnstr1 cnstr2 And)
       | SolverOrBuiltin (lval, cnstr1, cnstr2) ->
@@ -594,6 +606,18 @@ let () =
               , fun _ -> function
                   | [_; Libparser.Syntax.Expr cnstr; _] ->
                       (Libparser.Syntax.Instr (PrintConstaint cnstr), [])
+                  | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
+                , [ Dyp.Regexp (RE_String "print_byte")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [_; Libparser.Syntax.Expr byte; _] ->
+                      (Libparser.Syntax.Instr (PrintByte byte), [])
                   | _ ->
                       assert false )
               (* Constraint primitives *)
