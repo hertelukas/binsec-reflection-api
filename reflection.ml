@@ -53,6 +53,8 @@ type builtin +=
   | SolverGenericBuiltin of
       Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * binary operator
   | SolverIteBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
+  | SolverIteVarBuiltin of
+      Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
 
 module Reflection (P : Path.S) (S : STATE) :
   Exec.EXTENSION with type path = P.t and type state = S.t = struct
@@ -190,6 +192,20 @@ module Reflection (P : Path.S) (S : STATE) :
                      , Script.eval_expr cond env
                      , Script.eval_expr cnstr1 env
                      , Script.eval_expr cnstr2 env ) ) ]
+              (* TODO *)
+          | _ ->
+              [] )
+        | SolverIteVar (lval, cond, sym_var, sym_var2, length1, length2) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (SolverIteBuiltin
+                     ( var
+                     , Script.eval_expr cond env
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr sym_var2 env
+                     , Script.eval_expr length1 env
+                     , Script.eval_expr length2 env ) ) ]
               (* TODO *)
           | _ ->
               [] )
@@ -406,6 +422,30 @@ module Reflection (P : Path.S) (S : STATE) :
       | None ->
           S.assign dst_var cnstr2 state )
 
+  let solver_ite_var dst_var cond sym_var sym_var2 length1 length2 _ path _
+      state : (S.t, status) Result.t =
+    let cond, state = Eval.safe_eval cond state path in
+    let sym_var, state = Eval.safe_eval sym_var state path in
+    let sym_var2, state = Eval.safe_eval sym_var2 state path in
+    let length1, state = Eval.safe_eval length1 state path in
+    let length1 = Bitvector.to_uint (S.get_value length1 state) in
+    let length2, state = Eval.safe_eval length2 state path in
+    let length2 = Bitvector.to_uint (S.get_value length2 state) in
+    (* TODO assert length % 8 == 0 *)
+    let sym_var, state =
+      S.read ~addr:sym_var (length1 / 8) Machine.LittleEndian state
+    in
+    let sym_var2, state =
+      S.read ~addr:sym_var2 (length2 / 8) Machine.LittleEndian state
+    in
+    (* TODO check if this is correct *)
+    Ok
+      ( match S.assume cond state with
+      | Some _ ->
+          S.assign dst_var sym_var state
+      | None ->
+          S.assign dst_var sym_var2 state )
+
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
      (Virtual_address.t ->
@@ -443,6 +483,8 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (solver_generic lval sym_var sym_var2 length op)
       | SolverIteBuiltin (lval, cond, cnstr1, cnstr2) ->
           Some (solver_ite lval cond cnstr1 cnstr2)
+      | SolverIteVarBuiltin (lval, cond, sym_var, sym_var2, length1, length2) ->
+          Some (solver_ite_var lval cond sym_var sym_var2 length1 length2)
       | _ ->
           None )
 
