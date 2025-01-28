@@ -148,9 +148,8 @@ module Reflection (P : Path.S) (S : STATE) :
             [Builtin (PrintConstaintBuiltin (Script.eval_expr cnstr env))]
         | PrintByte byte ->
             [Builtin (PrintByteBuiltin (Script.eval_expr byte env))]
-            (* TODO add size until SolverITE *)
         | SolverAnd (lval, cnstr1, cnstr2) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:1 lval env with
           | Var var ->
               [ Builtin
                   (SolverAndBuiltin
@@ -161,7 +160,7 @@ module Reflection (P : Path.S) (S : STATE) :
           | _ ->
               [] )
         | SolverOr (lval, cnstr1, cnstr2) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:1 lval env with
           | Var var ->
               [ Builtin
                   (SolverOrBuiltin
@@ -172,7 +171,7 @@ module Reflection (P : Path.S) (S : STATE) :
           | _ ->
               [] )
         | SolverGeneric (lval, sym_var, sym_var2, length, op) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:1 lval env with
           | Var var ->
               [ Builtin
                   (SolverGenericBuiltin
@@ -185,7 +184,7 @@ module Reflection (P : Path.S) (S : STATE) :
               (* TODO *)
               [] )
         | SolverIte (lval, cond, cnstr1, cnstr2) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:1 lval env with
           | Var var ->
               [ Builtin
                   (SolverIteBuiltin
