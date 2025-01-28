@@ -585,7 +585,7 @@ let () =
                 , "default_priority"
                 , [] )
               , fun _ -> function
-                  | [_; Libparser.Syntax.Expr msg; _] ->
+                  | [_; _; Libparser.Syntax.Expr msg; _] ->
                       (Libparser.Syntax.Instr (PrintError msg), [])
                   | _ ->
                       assert false )
@@ -631,7 +631,8 @@ let () =
                 , [] )
               , fun _ -> function
                   | [ Libparser.Syntax.Loc lval
-                    ; __
+                    ; _
+                    ; _
                     ; _
                     ; Libparser.Syntax.Expr cnstr
                     ; _ ] ->
@@ -646,7 +647,7 @@ let () =
                 , "default_priority"
                 , [] )
               , fun _ -> function
-                  | [_; Libparser.Syntax.Expr cnstr; _] ->
+                  | [_; _; Libparser.Syntax.Expr cnstr; _] ->
                       (Libparser.Syntax.Instr (PrintConstaint cnstr), [])
                   | _ ->
                       assert false )
@@ -658,7 +659,7 @@ let () =
                 , "default_priority"
                 , [] )
               , fun _ -> function
-                  | [_; Libparser.Syntax.Expr byte; _] ->
+                  | [_; _; Libparser.Syntax.Expr byte; _] ->
                       (Libparser.Syntax.Instr (PrintByte byte), [])
                   | _ ->
                       assert false )
@@ -674,7 +675,8 @@ let () =
                 , [] )
               , fun _ -> function
                   | [ Libparser.Syntax.Loc lval
-                    ; __
+                    ; _
+                    ; _
                     ; _
                     ; Libparser.Syntax.Expr cnstr
                     ; _ ] ->
