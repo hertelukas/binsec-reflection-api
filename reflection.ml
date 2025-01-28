@@ -148,6 +148,7 @@ module Reflection (P : Path.S) (S : STATE) :
             [Builtin (PrintConstaintBuiltin (Script.eval_expr cnstr env))]
         | PrintByte byte ->
             [Builtin (PrintByteBuiltin (Script.eval_expr byte env))]
+            (* TODO add size until SolverITE *)
         | SolverAnd (lval, cnstr1, cnstr2) -> (
           match Script.eval_loc lval env with
           | Var var ->
@@ -195,6 +196,7 @@ module Reflection (P : Path.S) (S : STATE) :
               (* TODO *)
           | _ ->
               [] )
+        (* TODO use env.word_size to set the size and extend length1 or length2 to that *)
         | SolverIteVar (lval, cond, sym_var, sym_var2, length1, length2) -> (
           match Script.eval_loc lval env with
           | Var var ->
@@ -216,7 +218,10 @@ module Reflection (P : Path.S) (S : STATE) :
 
   let error msg _ path _ state : (S.t, status) Result.t =
     (* TODO how can I load the string from memory? *)
-    Logger.error "Error:" ; Error Die
+    (* /sse/exec.ml c_string *)
+    Logger.error "Error:" ;
+    (* TODO stops the bath, to stop completely use Error halt *)
+    Error Die
 
   let is_symbolic dst_var sym_var length _ path _ state : (S.t, status) Result.t
       =
@@ -363,7 +368,6 @@ module Reflection (P : Path.S) (S : STATE) :
     Logger.info "%a" (S.pp_smt (Some [(cnstr, "my_constaint")])) state ;
     Ok state
 
-  (* TODO check if correct *)
   let print_byte byte _ path _ state : (S.t, status) Result.t =
     let byte, state = Eval.safe_eval byte state path in
     Logger.info "%a" (S.pp_smt (Some [(byte, "my_byte")])) state ;
@@ -374,14 +378,7 @@ module Reflection (P : Path.S) (S : STATE) :
     let cnstr1, state = Eval.safe_eval cnstr1 state path in
     let cnstr2, state = Eval.safe_eval cnstr2 state path in
     let assumption = S.Value.binary op cnstr1 cnstr2 in
-    (* TODO check if this is correct *)
-    Ok
-      (( match S.assume assumption state with
-       | Some _ ->
-           S.assign dst_var (S.Value.constant (Bitvector.ones dst_var.size))
-       | None ->
-           S.assign dst_var (S.Value.constant (Bitvector.zeros dst_var.size)) )
-         state )
+    Ok (S.assign dst_var assumption state)
 
   let solver_generic (dst_var : Dba.Var.t) sym_var sym_var2 length op _ path _
       state : (S.t, status) Result.t =
@@ -396,31 +393,15 @@ module Reflection (P : Path.S) (S : STATE) :
       S.read ~addr:sym_var2 (length / 8) Machine.LittleEndian state
     in
     let assumption = S.Value.binary op sym_var sym_var2 in
-    (* TODO check if this is correct *)
-    match S.assume assumption state with
-    | Some _ ->
-        Ok
-          (S.assign dst_var
-             (S.Value.constant (Bitvector.ones dst_var.size))
-             state )
-    | None ->
-        Ok
-          (S.assign dst_var
-             (S.Value.constant (Bitvector.zeros dst_var.size))
-             state )
+    Ok (S.assign dst_var assumption state)
 
   let solver_ite dst_var cond cnstr1 cnstr2 _ path _ state :
       (S.t, status) Result.t =
     let cond, state = Eval.safe_eval cond state path in
     let cnstr1, state = Eval.safe_eval cnstr1 state path in
     let cnstr2, state = Eval.safe_eval cnstr2 state path in
-    (* TODO check if this is correct *)
-    Ok
-      ( match S.assume cond state with
-      | Some _ ->
-          S.assign dst_var cnstr1 state
-      | None ->
-          S.assign dst_var cnstr2 state )
+    let assumption = S.Value.ite cond cnstr1 cnstr2 in
+    Ok (S.assign dst_var assumption state)
 
   let solver_ite_var dst_var cond sym_var sym_var2 length1 length2 _ path _
       state : (S.t, status) Result.t =
@@ -438,13 +419,8 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var2, state =
       S.read ~addr:sym_var2 (length2 / 8) Machine.LittleEndian state
     in
-    (* TODO check if this is correct *)
-    Ok
-      ( match S.assume cond state with
-      | Some _ ->
-          S.assign dst_var sym_var state
-      | None ->
-          S.assign dst_var sym_var2 state )
+    let assumption = S.Value.ite cond sym_var sym_var2 in
+    Ok (S.assign dst_var assumption state)
 
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->

@@ -42,6 +42,9 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 - [X] ~void assume(cnstr_t cnstr);~
   + Already exists like assert
 - [ ] ~long eval(symbolic var, size_t length, cnstr_t extra);~
+  + Assume extra (but do not update the state)
+  + S.get_value
+  + If I have a value, return bitvector with that value
 
 ** Memory Primitives [0/3]
 - [ ] ~void* mem_alloc(size_t size);~
