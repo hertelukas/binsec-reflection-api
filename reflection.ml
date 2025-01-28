@@ -199,7 +199,7 @@ module Reflection (P : Path.S) (S : STATE) :
           match Script.eval_loc lval env with
           | Var var ->
               [ Builtin
-                  (SolverIteBuiltin
+                  (SolverIteVarBuiltin
                      ( var
                      , Script.eval_expr cond env
                      , Script.eval_expr sym_var env
@@ -681,11 +681,11 @@ let () =
                       (Libparser.Syntax.Instr (IsSat (lval, cnstr)), [])
                   | _ ->
                       assert false )
-            ; ( loc_expr_expr_parser "_solver_OR"
+            ; ( loc_expr_expr_parser "_solver_Or"
               , fun _ ->
                   loc_expr_expr_instr (fun (lval, cnstr1, cnstr2) ->
                       SolverOr (lval, cnstr1, cnstr2) ) )
-            ; ( loc_expr_expr_parser "_solver_AND"
+            ; ( loc_expr_expr_parser "_solver_And"
               , fun _ ->
                   loc_expr_expr_instr (fun (lval, cnstr1, cnstr2) ->
                       SolverAnd (lval, cnstr1, cnstr2) ) )
