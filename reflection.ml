@@ -215,12 +215,25 @@ module Reflection (P : Path.S) (S : STATE) :
 
   let process_callback = None
 
+  let get_string (str_addr : S.Value.t) state =
+    try
+      let buf = Buffer.create 16 in
+      let rec iter addr =
+        let byte =
+          S.get_a_value (fst (S.read ~addr:str_addr 1 LittleEndian state)) state
+        in
+        if Bitvector.is_zeros byte then Buffer.contents buf
+        else (
+          Buffer.add_char buf (Bitvector.to_char byte) ;
+          iter (Bitvector.succ addr) )
+      in
+      iter (Bitvector.zeros (Kernel_options.Machine.word_size ()))
+    with Uninterp _ -> ""
+
   let error msg _ path _ state : (S.t, status) Result.t =
-    (* TODO how can I load the string from memory? *)
-    (* /sse/exec.ml c_string *)
-    Logger.error "Error:" ;
-    (* TODO stops the bath, to stop completely use Error halt *)
-    Error Die
+    let msg, state = Eval.safe_eval msg state path in
+    let s = get_string msg state in
+    Logger.error "%s" s ; Error Halt
 
   let is_symbolic dst_var sym_var length _ path _ state : (S.t, status) Result.t
       =

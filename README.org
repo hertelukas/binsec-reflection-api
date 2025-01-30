@@ -57,17 +57,17 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 - [ ] ~symbolic _solver_ZeroExt(symbolic sym_var, size_t to_extend, size_t length);~
 - [ ] ~symbolic _solver_SignExt(symbolic sym_var, size_t to_extend, size_t length);~
 
-** Constraint Primitives [0/11]
-- [ ] ~cnstr_t _solver_NOT(cnstr_t cnstr1);~
-- [ ] ~cnstr_t _solver_Or(cnstr_t cnstr1, cnstr_t cnstr2);~
-- [ ] ~cnstr_t _solver_And(cnstr_t cnstr1, cnstr_t cnstr2);~
-- [ ] ~cnstr_t _solver_EQ(symbolic sym_var, symbolic sym_var2, size_t length);~
+** Constraint Primitives [9/11]
+- [X] ~cnstr_t _solver_NOT(cnstr_t cnstr1);~
+- [X] ~cnstr_t _solver_Or(cnstr_t cnstr1, cnstr_t cnstr2);~
+- [X] ~cnstr_t _solver_And(cnstr_t cnstr1, cnstr_t cnstr2);~
+- [X] ~cnstr_t _solver_EQ(symbolic sym_var, symbolic sym_var2, size_t length);~
 - [ ] ~cnstr_t _solver_NEQ(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [ ] ~cnstr_t _solver_LT(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [ ] ~cnstr_t _solver_LE(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [ ] ~cnstr_t _solver_SLT(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [ ] ~cnstr_t _solver_SLE(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [ ] ~cnstr_t _solver_ITE(cnstr_t cond, cnstr_t cnstr1, cnstr_t cnstr2);~
+- [X] ~cnstr_t _solver_LT(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [X] ~cnstr_t _solver_LE(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [X] ~cnstr_t _solver_SLT(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [X] ~cnstr_t _solver_SLE(symbolic sym_var, symbolic sym_var2, size_t length);~
+- [X] ~cnstr_t _solver_ITE(cnstr_t cond, cnstr_t cnstr1, cnstr_t cnstr2);~
 - [ ] ~symbolic _solver_ITE_VAR(cnstr_t cond, symbolic sym_var, symbolic sym_var2, size_t length1, size_t length2);~
 
 ** Summary Validation [0/7]
