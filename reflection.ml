@@ -15,6 +15,8 @@ type Ast.Instr.t +=
   | Maximize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | Minimize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | NewSymVar of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
+  | NewSymVarNamed of
+      Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | PrintByte of Ast.Expr.t Ast.loc
   | PrintConstaint of Ast.Expr.t Ast.loc
   | PrintError of Ast.Expr.t Ast.loc
@@ -46,6 +48,7 @@ type builtin +=
   | MaximizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | MinimizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | NewSymVarBuiltin of Dba.Var.t * Dba.Expr.t
+  | NewSymVarNamedBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | PrintByteBuiltin of Dba.Expr.t
   | PrintConstaintBuiltin of Dba.Expr.t
   | SolverOrBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
@@ -142,6 +145,16 @@ module Reflection (P : Path.S) (S : STATE) :
           match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
               [Builtin (NewSymVarBuiltin (var, Script.eval_expr length env))]
+          | _ ->
+              [] (* TODO *) )
+        | NewSymVarNamed (lval, name, length) -> (
+          match Script.eval_loc ~size:env.wordsize lval env with
+          | Var var ->
+              [ Builtin
+                  (NewSymVarNamedBuiltin
+                     ( var
+                     , Script.eval_expr name env
+                     , Script.eval_expr length env ) ) ]
           | _ ->
               [] (* TODO *) )
         | PrintConstaint cnstr ->
@@ -332,13 +345,8 @@ module Reflection (P : Path.S) (S : STATE) :
     let state = binary_search l r state sym_var in
     Ok state
 
-  let new_sym_var (dst_var : Dba.Var.t) length _ path _ state :
+  let new_sym_var_from_tmp (dst_var : Dba.Var.t) tmp length_int state path :
       (S.t, status) Result.t =
-    let length, state = Eval.safe_eval length state path in
-    let length_int = Bitvector.to_uint (S.get_value length state) in
-    let length = Size.Bit.create length_int in
-    (* 1. create symbolic variable; use src/dba/dba.mli Var temporary with bitsize*)
-    let tmp = Var.temp length in
     (* 2 use Eval.fresh with this temp to create a new symbolic value *)
     let state = Eval.fresh tmp state path in
     (* 3. extend it to 64 bit, if lower, if greater warn and truncate *)
@@ -356,6 +364,26 @@ module Reflection (P : Path.S) (S : STATE) :
     (* 4. assign intermediate to dst_var *)
     let state = S.assign dst_var sym_var state in
     Ok state
+
+  let new_sym_var (dst_var : Dba.Var.t) length _ path _ state :
+      (S.t, status) Result.t =
+    let length, state = Eval.safe_eval length state path in
+    let length_int = Bitvector.to_uint (S.get_value length state) in
+    let length = Size.Bit.create length_int in
+    (* 1. create symbolic variable; use src/dba/dba.mli Var temporary with bitsize*)
+    let tmp = Var.temp length in
+    new_sym_var_from_tmp dst_var tmp length_int state path
+
+  let new_sym_var_named (dst_var : Dba.Var.t) name length _ path _ state :
+      (S.t, status) Result.t =
+    let length, state = Eval.safe_eval length state path in
+    let length_int = Bitvector.to_uint (S.get_value length state) in
+    let length = Size.Bit.create length_int in
+    let name, state = Eval.safe_eval name state path in
+    let name = get_string name state in
+    (* 1. create symbolic variable; use src/dba/dba.mli Var temporary with bitsize*)
+    let tmp = Var.temporary name length in
+    new_sym_var_from_tmp dst_var tmp length_int state path
 
   let is_sat (dst_var : Dba.Var.t) cnstr _ path _ state : (S.t, status) Result.t
       =
@@ -461,6 +489,8 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (max_min false lval sym_var length)
       | NewSymVarBuiltin (lval, length) ->
           Some (new_sym_var lval length)
+      | NewSymVarNamedBuiltin (lval, name, length) ->
+          Some (new_sym_var_named lval name length)
       | PrintConstaintBuiltin cnstr ->
           Some (print_constraint cnstr)
       | PrintByteBuiltin byte ->
@@ -610,6 +640,10 @@ let () =
                       (Libparser.Syntax.Instr (NewSymVar (lval, length)), [])
                   | _ ->
                       assert false )
+            ; ( loc_expr_expr_parser "new_sym_var_named"
+              , fun _ ->
+                  loc_expr_expr_instr (fun (lval, name, length) ->
+                      NewSymVarNamed (lval, name, length) ) )
             ; ( ( "fallthrough"
                 , [ Dyp.Non_ter ("loc", No_priority)
                   ; Dyp.Regexp (RE_String ":=")
