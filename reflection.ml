@@ -270,8 +270,23 @@ module Reflection (P : Path.S) (S : STATE) :
 
   let eval dst_var sym_var length extra _ path _ state : (S.t, status) Result.t
       =
-    (* TODO *)
-    Ok state
+    let extra, state = Eval.safe_eval extra state path in
+    match S.assume extra state with
+    | Some _ ->
+        let sym_var, state = Eval.safe_eval sym_var state path in
+        let length, state = Eval.safe_eval length state path in
+        let length = Bitvector.to_uint (S.get_value length state) in
+        (* TODO assert length % 8 == 0 *)
+        let sym_var, state =
+          S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
+        in
+        Ok
+          (S.assign dst_var
+             (S.Value.constant (S.get_value sym_var state))
+             state )
+    | None ->
+      (* TODO really just assign nothing? *)
+        Ok state
 
   let is_symbolic dst_var sym_var length _ path _ state : (S.t, status) Result.t
       =
