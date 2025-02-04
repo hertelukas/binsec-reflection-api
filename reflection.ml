@@ -10,6 +10,11 @@ include Cli.Make (struct
 end)
 
 type Ast.Instr.t +=
+  | Eval of
+      Ast.Loc.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
   | IsSat of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
   | IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | Maximize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
@@ -42,6 +47,7 @@ type Ast.Instr.t +=
       * Ast.Expr.t Ast.loc
 
 type builtin +=
+  | EvalBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
   | ErrorBuiltin of Dba.Expr.t
   | IsSatBuiltin of Dba.Var.t * Dba.Expr.t
   | IsSymbolicBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
@@ -80,6 +86,18 @@ module Reflection (P : Path.S) (S : STATE) :
         match inst with
         | PrintError msg ->
             [Builtin (ErrorBuiltin (Script.eval_expr msg env))]
+        | Eval (lval, sym_var, length, extra) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (EvalBuiltin
+                     ( var
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr length env
+                     , Script.eval_expr extra env ) ) ]
+              (* TODO *)
+          | _ ->
+              [] )
         | IsSat (lval, cnstr) -> (
           match Script.eval_loc ~size:1 lval env with
           | Var var ->
@@ -249,6 +267,11 @@ module Reflection (P : Path.S) (S : STATE) :
     let msg, state = Eval.safe_eval msg state path in
     let s = get_string msg state in
     Logger.error "%s" s ; Error Halt
+
+  let eval dst_var sym_var length extra _ path _ state : (S.t, status) Result.t
+      =
+    (* TODO *)
+    Ok state
 
   let is_symbolic dst_var sym_var length _ path _ state : (S.t, status) Result.t
       =
@@ -477,6 +500,8 @@ module Reflection (P : Path.S) (S : STATE) :
   let builtin_callback =
     Some
       (function
+      | EvalBuiltin (lval, sym_var, length, extra) ->
+          Some (eval lval sym_var length extra)
       | ErrorBuiltin msg ->
           Some (error msg)
       | IsSatBuiltin (lval, cnstr) ->
@@ -687,6 +712,11 @@ let () =
                       (Libparser.Syntax.Instr (PrintByte byte), [])
                   | _ ->
                       assert false )
+            ; ( loc_expr_expr_expr_parser "eval"
+              , fun _ ->
+                  loc_expr_expr_expr_instr
+                    (fun (lval, sym_var, length, extra) ->
+                      Eval (lval, sym_var, length, extra) ) )
               (* Constraint primitives *)
             ; ( ( "fallthrough"
                 , [ Dyp.Non_ter ("loc", No_priority)
