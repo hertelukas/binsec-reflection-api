@@ -25,8 +25,19 @@ type Ast.Instr.t +=
   | PrintByte of Ast.Expr.t Ast.loc
   | PrintConstaint of Ast.Expr.t Ast.loc
   | PrintError of Ast.Expr.t Ast.loc
-  | SolverOr of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | SolverAnd of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | SolverConcat of
+      Ast.Loc.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+  | SolverExtract of
+      Ast.Loc.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
   | SolverGeneric of
       Ast.Loc.t Ast.loc
       * Ast.Expr.t Ast.loc
@@ -45,6 +56,17 @@ type Ast.Instr.t +=
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
+  | SolverOr of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | SolverSignExt of
+      Ast.Loc.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+  | SolverZeroExt of
+      Ast.Loc.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
+      * Ast.Expr.t Ast.loc
   | StateConstraints of Ast.Loc.t Ast.loc
 
 type builtin +=
@@ -58,13 +80,19 @@ type builtin +=
   | NewSymVarNamedBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | PrintByteBuiltin of Dba.Expr.t
   | PrintConstaintBuiltin of Dba.Expr.t
-  | SolverOrBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | SolverAndBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
+  | SolverConcatBuiltin of
+      Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
+  | SolverExtractBuiltin of
+      Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
   | SolverGenericBuiltin of
       Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * binary operator
   | SolverIteBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
   | SolverIteVarBuiltin of
       Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
+  | SolverOrBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
+  | SolverSignExtBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
+  | SolverZeroExtBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
   | StateConstraintsBuiltin of Dba.Var.t
 
 module Reflection (P : Path.S) (S : STATE) :
@@ -192,6 +220,30 @@ module Reflection (P : Path.S) (S : STATE) :
               (* TODO*)
           | _ ->
               [] )
+        | SolverConcat (lval, sym_var, sym_var2, length1, length2) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (SolverConcatBuiltin
+                     ( var
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr sym_var2 env
+                     , Script.eval_expr length1 env
+                     , Script.eval_expr length2 env ) ) ]
+          | _ ->
+              [] )
+        | SolverExtract (lval, sym_var, start, end_var, length) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (SolverExtractBuiltin
+                     ( var
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr start env
+                     , Script.eval_expr end_var env
+                     , Script.eval_expr length env ) ) ]
+          | _ ->
+              [] )
         | SolverOr (lval, cnstr1, cnstr2) -> (
           match Script.eval_loc ~size:1 lval env with
           | Var var ->
@@ -241,6 +293,28 @@ module Reflection (P : Path.S) (S : STATE) :
                      , Script.eval_expr length1 env
                      , Script.eval_expr length2 env ) ) ]
               (* TODO *)
+          | _ ->
+              [] )
+        | SolverSignExt (lval, sym_var, to_extend, length) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (SolverSignExtBuiltin
+                     ( var
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr to_extend env
+                     , Script.eval_expr length env ) ) ]
+          | _ ->
+              [] )
+        | SolverZeroExt (lval, sym_var, to_extend, length) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [ Builtin
+                  (SolverZeroExtBuiltin
+                     ( var
+                     , Script.eval_expr sym_var env
+                     , Script.eval_expr to_extend env
+                     , Script.eval_expr length env ) ) ]
           | _ ->
               [] )
         | StateConstraints lval -> (
@@ -522,6 +596,23 @@ module Reflection (P : Path.S) (S : STATE) :
     in
     Ok (S.assign dst_var cnstr state)
 
+  (* TODO *)
+  let solver_concat dst_var sym_var sym_var2 length1 length2 _ path _ state :
+      (S.t, status) Result.t =
+    Ok state
+
+  let solver_extract dst_var sym_var start end_var length _ path _ state :
+      (S.t, status) Result.t =
+    Ok state
+
+  let solver_zero_ext dst_var sym_var to_extend length _ path _ state :
+      (S.t, status) Result.t =
+    Ok state
+
+  let solver_sign_ext dst_var sym_var to_extend length _ path _ state :
+      (S.t, status) Result.t =
+    Ok state
+
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
      (Virtual_address.t ->
@@ -557,6 +648,10 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (print_byte byte)
       | SolverAndBuiltin (lval, cnstr1, cnstr2) ->
           Some (solver_and_or lval cnstr1 cnstr2 And)
+      | SolverConcatBuiltin (lval, sym_var, sym_var2, length1, length2) ->
+          Some (solver_concat lval sym_var sym_var2 length1 length2)
+      | SolverExtractBuiltin (lval, sym_var, start, end_var, length) ->
+          Some (solver_extract lval sym_var start end_var length)
       | SolverOrBuiltin (lval, cnstr1, cnstr2) ->
           Some (solver_and_or lval cnstr1 cnstr2 Or)
       | SolverGenericBuiltin (lval, sym_var, sym_var2, length, op) ->
@@ -565,6 +660,10 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (solver_ite lval cond cnstr1 cnstr2)
       | SolverIteVarBuiltin (lval, cond, sym_var, sym_var2, length1, length2) ->
           Some (solver_ite_var lval cond sym_var sym_var2 length1 length2)
+      | SolverSignExtBuiltin (lval, sym_var, to_extend, length) ->
+          Some (solver_sign_ext lval sym_var to_extend length)
+      | SolverZeroExtBuiltin (lval, sym_var, to_extend, length) ->
+          Some (solver_zero_ext lval sym_var to_extend length)
       | StateConstraintsBuiltin lval ->
           Some (state_constraints lval)
       | _ ->
@@ -767,6 +866,84 @@ let () =
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, length, extra) ->
                       Eval (lval, sym_var, length, extra) ) )
+              (* Symbolic value primitives *)
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "_solver_Concat")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; _
+                    ; _
+                    ; _
+                    ; Libparser.Syntax.Expr sym_var
+                    ; _
+                    ; Libparser.Syntax.Expr sym_var2
+                    ; _
+                    ; Libparser.Syntax.Expr length1
+                    ; _
+                    ; Libparser.Syntax.Expr length2
+                    ; _ ] ->
+                      ( Libparser.Syntax.Instr
+                          (SolverConcat
+                             (lval, sym_var, sym_var2, length1, length2) )
+                      , [] )
+                  | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "_solver_Extract")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ',')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; _
+                    ; _
+                    ; _
+                    ; Libparser.Syntax.Expr sym_var
+                    ; _
+                    ; Libparser.Syntax.Expr start
+                    ; _
+                    ; Libparser.Syntax.Expr end_val
+                    ; _
+                    ; Libparser.Syntax.Expr length
+                    ; _ ] ->
+                      ( Libparser.Syntax.Instr
+                          (SolverExtract (lval, sym_var, start, end_val, length))
+                      , [] )
+                  | _ ->
+                      assert false )
+            ; ( loc_expr_expr_expr_parser "_solver_ZeroExt"
+              , fun _ ->
+                  loc_expr_expr_expr_instr
+                    (fun (lval, sym_var, to_extend, length) ->
+                      SolverZeroExt (lval, sym_var, to_extend, length) ) )
+            ; ( loc_expr_expr_expr_parser "_solver_SignExt"
+              , fun _ ->
+                  loc_expr_expr_expr_instr
+                    (fun (lval, sym_var, to_extend, length) ->
+                      SolverSignExt (lval, sym_var, to_extend, length) ) )
               (* Constraint primitives *)
             ; ( ( "fallthrough"
                 , [ Dyp.Non_ter ("loc", No_priority)
