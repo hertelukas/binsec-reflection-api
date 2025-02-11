@@ -45,6 +45,7 @@ type Ast.Instr.t +=
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
+  | StateConstraints of Ast.Loc.t Ast.loc
 
 type builtin +=
   | EvalBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
@@ -64,6 +65,7 @@ type builtin +=
   | SolverIteBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
   | SolverIteVarBuiltin of
       Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
+  | StateConstraintsBuiltin of Dba.Var.t
 
 module Reflection (P : Path.S) (S : STATE) :
   Exec.EXTENSION with type path = P.t and type state = S.t = struct
@@ -240,6 +242,13 @@ module Reflection (P : Path.S) (S : STATE) :
                      , Script.eval_expr length2 env ) ) ]
               (* TODO *)
           | _ ->
+              [] )
+        | StateConstraints lval -> (
+          match Script.eval_loc ~size:1 lval env with
+          | Var var ->
+              [Builtin (StateConstraintsBuiltin var)]
+          | _ ->
+              (* TODO *)
               [] )
         | _ ->
             [] )
@@ -502,6 +511,17 @@ module Reflection (P : Path.S) (S : STATE) :
     let assumption = S.Value.ite cond sym_var sym_var2 in
     Ok (S.assign dst_var assumption state)
 
+  (* TODO discuss if correct *)
+  let state_constraints (dst_var : Dba.Var.t) _ _ _ state :
+      (S.t, status) Result.t =
+    let f a b = S.Value.binary And a b in
+    let cnstr =
+      List.fold_left f
+        (S.Value.constant (Bitvector.zeros dst_var.size))
+        (S.assertions state)
+    in
+    Ok (S.assign dst_var cnstr state)
+
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
      (Virtual_address.t ->
@@ -545,6 +565,8 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (solver_ite lval cond cnstr1 cnstr2)
       | SolverIteVarBuiltin (lval, cond, sym_var, sym_var2, length1, length2) ->
           Some (solver_ite_var lval cond sym_var sym_var2 length1 length2)
+      | StateConstraintsBuiltin lval ->
+          Some (state_constraints lval)
       | _ ->
           None )
 
@@ -647,6 +669,19 @@ let () =
               , fun _ -> function
                   | [_; _; Libparser.Syntax.Expr msg; _] ->
                       (Libparser.Syntax.Instr (PrintError msg), [])
+                  | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "state_constraints")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [Libparser.Syntax.Loc lval; _; _; _; _] ->
+                      (Libparser.Syntax.Instr (StateConstraints lval), [])
                   | _ ->
                       assert false )
             ; ( loc_expr_expr_parser "maximize"

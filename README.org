@@ -9,13 +9,13 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 #+end_src
 
 * Primitives
-** Core Reflection Primitives [11/13]
+** Core Reflection Primitives [12/13]
 - [X] ~void error(char *msg);~
   + As builtin
   + See new_sym_var_named
   + Logger.error to print
   + If it is always the end, instead Ok State return Err "reason"
-- [ ] ~cnstr_t state_constraints();~
+- [X] ~cnstr_t state_constraints();~
   + Use state.assertion to get list of every assertion
   + Create and of all expressions
   + Extend to size of container
