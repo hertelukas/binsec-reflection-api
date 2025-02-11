@@ -51,11 +51,11 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
 - [ ] ~size_t mem_bytes(void* ptr);~
 - [ ] ~void mem_free(void* ptr);~
 
-** Symbolic Value Primitives [0/4]
-- [ ] ~symbolic _solver_Concat(symbolic sym_var, symbolic sym_var2, size_t length1, size_t length2);~
+** Symbolic Value Primitives [3/4]
+- [X] ~symbolic _solver_Concat(symbolic sym_var, symbolic sym_var2, size_t length1, size_t length2);~
 - [ ] ~symbolic _solver_Extract(symbolic sym_var, size_t start, size_t end, size_t length);~
-- [ ] ~symbolic _solver_ZeroExt(symbolic sym_var, size_t to_extend, size_t length);~
-- [ ] ~symbolic _solver_SignExt(symbolic sym_var, size_t to_extend, size_t length);~
+- [X] ~symbolic _solver_ZeroExt(symbolic sym_var, size_t to_extend, size_t length);~
+- [X] ~symbolic _solver_SignExt(symbolic sym_var, size_t to_extend, size_t length);~
 
 ** Constraint Primitives [9/11]
 - [X] ~cnstr_t _solver_NOT(cnstr_t cnstr1);~

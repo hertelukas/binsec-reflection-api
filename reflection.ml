@@ -596,22 +596,61 @@ module Reflection (P : Path.S) (S : STATE) :
     in
     Ok (S.assign dst_var cnstr state)
 
-  (* TODO *)
   let solver_concat dst_var sym_var sym_var2 length1 length2 _ path _ state :
       (S.t, status) Result.t =
-    Ok state
+    let sym_var, state = Eval.safe_eval sym_var state path in
+    let sym_var2, state = Eval.safe_eval sym_var2 state path in
+    let length1, state = Eval.safe_eval length1 state path in
+    let length1 = Bitvector.to_uint (S.get_value length1 state) in
+    let length2, state = Eval.safe_eval length2 state path in
+    let length2 = Bitvector.to_uint (S.get_value length2 state) in
+    let sym_var, state =
+      S.read ~addr:sym_var (length1 / 8) Machine.LittleEndian state
+    in
+    let sym_var2, state =
+      S.read ~addr:sym_var2 (length2 / 8) Machine.LittleEndian state
+    in
+    (* TODO correct? *)
+    let sym_var = S.Value.binary Concat sym_var sym_var2 in
+    Ok (S.assign dst_var sym_var state)
 
   let solver_extract dst_var sym_var start end_var length _ path _ state :
       (S.t, status) Result.t =
+    let sym_var, state = Eval.safe_eval sym_var state path in
+    let length, state = Eval.safe_eval length state path in
+    let length = Bitvector.to_uint (S.get_value length state) in
+    let sym_var, state =
+      S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
+    in
+    (* TODO actually only take slice *)
     Ok state
 
+  (* _solver_ZeroExt - Extends symbolic varible <sym_var> with <to_extend> bits *)
   let solver_zero_ext dst_var sym_var to_extend length _ path _ state :
       (S.t, status) Result.t =
-    Ok state
+    let sym_var, state = Eval.safe_eval sym_var state path in
+    let to_extend, state = Eval.safe_eval to_extend state path in
+    let to_extend = Bitvector.to_uint (S.get_value to_extend state) in
+    let length, state = Eval.safe_eval length state path in
+    let length = Bitvector.to_uint (S.get_value length state) in
+    let sym_var, state =
+      S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
+    in
+    let sym_var = S.Value.unary (Uext (length + to_extend)) sym_var in
+    Ok (S.assign dst_var sym_var state)
 
   let solver_sign_ext dst_var sym_var to_extend length _ path _ state :
       (S.t, status) Result.t =
-    Ok state
+    let sym_var, state = Eval.safe_eval sym_var state path in
+    let to_extend, state = Eval.safe_eval to_extend state path in
+    let to_extend = Bitvector.to_uint (S.get_value to_extend state) in
+    let length, state = Eval.safe_eval length state path in
+    let length = Bitvector.to_uint (S.get_value length state) in
+    let sym_var, state =
+      S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
+    in
+    let sym_var = S.Value.unary (Sext (length + to_extend)) sym_var in
+    Ok (S.assign dst_var sym_var state)
 
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
