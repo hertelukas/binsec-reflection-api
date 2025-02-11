@@ -18,6 +18,9 @@ type Ast.Instr.t +=
   | IsSat of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
   | IsSymbolic of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | Maximize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
+  | MemAlloc of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
+  | MemBytes of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
+  | MemFree of Ast.Expr.t Ast.loc
   | Minimize of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | NewSymVar of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
   | NewSymVarNamed of
@@ -75,6 +78,9 @@ type builtin +=
   | IsSatBuiltin of Dba.Var.t * Dba.Expr.t
   | IsSymbolicBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | MaximizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
+  | MemAllocBuiltin of Dba.Var.t * Dba.Expr.t
+  | MemBytesBuiltin of Dba.Var.t * Dba.Expr.t
+  | MemFreeBuiltin of Dba.Expr.t
   | MinimizeBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | NewSymVarBuiltin of Dba.Var.t * Dba.Expr.t
   | NewSymVarNamedBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
@@ -178,6 +184,22 @@ module Reflection (P : Path.S) (S : STATE) :
               (* TODO handle other cases *)
           | _ ->
               [] )
+        | MemAlloc (lval, size) -> (
+          match Script.eval_loc ~size:env.wordsize lval env with
+          | Var var ->
+              [Builtin (MemAllocBuiltin (var, Script.eval_expr size env))]
+              (* TODO other cases *)
+          | _ ->
+              [] )
+        | MemBytes (lval, ptr) -> (
+          match Script.eval_loc lval env with
+          | Var var ->
+              [Builtin (MemBytesBuiltin (var, Script.eval_expr ptr env))]
+              (* TODO other cases *)
+          | _ ->
+              [] )
+        | MemFree size ->
+            [Builtin (MemFreeBuiltin (Script.eval_expr size env))]
         | Minimize (lval, sym_var, length) -> (
           match Script.eval_loc lval env with
           | Var var ->
@@ -652,6 +674,12 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var = S.Value.unary (Sext (length + to_extend)) sym_var in
     Ok (S.assign dst_var sym_var state)
 
+  let mem_alloc dst_var size _ path _ state : (S.t, status) Result.t = Ok state
+
+  let mem_bytes dst_var ptr _ path _ state : (S.t, status) Result.t = Ok state
+
+  let mem_free ptr _ path _ state : (S.t, status) Result.t = Ok state
+
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
      (Virtual_address.t ->
@@ -675,6 +703,12 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (is_symbolic lval sym_var length)
       | MaximizeBuiltin (lval, sym_var, length) ->
           Some (max_min true lval sym_var length)
+      | MemAllocBuiltin (lval, size) ->
+          Some (mem_alloc lval size)
+      | MemBytesBuiltin (lval, ptr) ->
+          Some (mem_bytes lval ptr)
+      | MemFreeBuiltin ptr ->
+          Some (mem_free ptr)
       | MinimizeBuiltin (lval, sym_var, length) ->
           Some (max_min false lval sym_var length)
       | NewSymVarBuiltin (lval, length) ->
@@ -905,6 +939,57 @@ let () =
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, length, extra) ->
                       Eval (lval, sym_var, length, extra) ) )
+              (* Memory primitives *)
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "mem_alloc")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; _
+                    ; _
+                    ; _
+                    ; Libparser.Syntax.Expr size
+                    ; _ ] ->
+                      (Libparser.Syntax.Instr (MemAlloc (lval, size)), [])
+                  | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
+                , [ Dyp.Non_ter ("loc", No_priority)
+                  ; Dyp.Regexp (RE_String ":=")
+                  ; Dyp.Regexp (RE_String "mem_bytes")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [ Libparser.Syntax.Loc lval
+                    ; _
+                    ; _
+                    ; _
+                    ; Libparser.Syntax.Expr ptr
+                    ; _ ] ->
+                      (Libparser.Syntax.Instr (MemBytes (lval, ptr)), [])
+                  | _ ->
+                      assert false )
+            ; ( ( "fallthrough"
+                , [ Dyp.Regexp (RE_String "mem_free")
+                  ; Dyp.Regexp (RE_Char '(')
+                  ; Dyp.Non_ter ("expr", No_priority)
+                  ; Dyp.Regexp (RE_Char ')') ]
+                , "default_priority"
+                , [] )
+              , fun _ -> function
+                  | [_; _; Libparser.Syntax.Expr ptr; _] ->
+                      (Libparser.Syntax.Instr (MemFree ptr), [])
+                  | _ ->
+                      assert false )
               (* Symbolic value primitives *)
             ; ( ( "fallthrough"
                 , [ Dyp.Non_ter ("loc", No_priority)
