@@ -1101,12 +1101,11 @@ let () =
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, sym_var2, length) ->
                       SolverGeneric (lval, sym_var, sym_var2, length, Eq) ) )
-              (* TODO, this currently just does equals *)
             ; ( loc_expr_expr_expr_parser "_solver_NEQ"
               , fun _ ->
                   loc_expr_expr_expr_instr
                     (fun (lval, sym_var, sym_var2, length) ->
-                      SolverGeneric (lval, sym_var, sym_var2, length, Eq) ) )
+                      SolverGeneric (lval, sym_var, sym_var2, length, Diff) ) )
             ; ( loc_expr_expr_expr_parser "_solver_LT"
               , fun _ ->
                   loc_expr_expr_expr_instr
