@@ -702,12 +702,20 @@ module Reflection (P : Path.S) (S : STATE) :
   (* if size is symbolic, maximize *)
   (* Use map between constant address and metadata *)
   let mem_alloc dst_var size _ path _ state : (S.t, status) Result.t =
-    (* *)
     let heap = P.get key_id path in
-    (* TODO update heap, and assign btivector of base pointer *)
+    (* TODO update heap, and assign bitvector of base pointer *)
     P.set key_id heap path ; Ok state
 
-  let mem_bytes dst_var ptr _ path _ state : (S.t, status) Result.t = Ok state
+  let mem_bytes dst_var ptr _ path _ state : (S.t, status) Result.t =
+    let ptr, state = Eval.safe_eval ptr state path in
+    let ptr = S.get_value ptr state in
+    let heap : my_heap = P.get key_id path in
+    let base_ptr, len =
+      List.find (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr > 0) heap
+    in
+    if ptr != base_ptr then
+      Logger.warning "mem_bytes called into the middle of a chunk!" ;
+    Ok (S.assign dst_var (S.Value.constant (Bitvector.of_int64 len)) state)
 
   let mem_free ptr _ path _ state : (S.t, status) Result.t = Ok state
 
