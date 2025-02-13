@@ -101,6 +101,9 @@ type builtin +=
   | SolverZeroExtBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
   | StateConstraintsBuiltin of Dba.Var.t
 
+(* TODO replace with actual map *)
+type my_heap = (Bitvector.t * int64) list
+
 module Reflection (P : Path.S) (S : STATE) :
   Exec.EXTENSION with type path = P.t and type state = S.t = struct
   type path = P.t
@@ -108,6 +111,8 @@ module Reflection (P : Path.S) (S : STATE) :
   and state = S.t
 
   module Eval = Eval.Make (P) (S)
+
+  let key_id = P.register_key []
 
   let initialization_callback = None
 
@@ -243,7 +248,7 @@ module Reflection (P : Path.S) (S : STATE) :
           | _ ->
               [] )
         | SolverConcat (lval, sym_var, sym_var2, length1, length2) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
               [ Builtin
                   (SolverConcatBuiltin
@@ -255,7 +260,7 @@ module Reflection (P : Path.S) (S : STATE) :
           | _ ->
               [] )
         | SolverExtract (lval, sym_var, start, end_var, length) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
               [ Builtin
                   (SolverExtractBuiltin
@@ -318,7 +323,7 @@ module Reflection (P : Path.S) (S : STATE) :
           | _ ->
               [] )
         | SolverSignExt (lval, sym_var, to_extend, length) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
               [ Builtin
                   (SolverSignExtBuiltin
@@ -329,7 +334,7 @@ module Reflection (P : Path.S) (S : STATE) :
           | _ ->
               [] )
         | SolverZeroExt (lval, sym_var, to_extend, length) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
               [ Builtin
                   (SolverZeroExtBuiltin
@@ -607,15 +612,25 @@ module Reflection (P : Path.S) (S : STATE) :
     let assumption = S.Value.ite cond sym_var sym_var2 in
     Ok (S.assign dst_var assumption state)
 
+  let extend_with_warning sym_var current_length (dst_var : Dba.Var.t) =
+    if current_length < dst_var.size then
+      S.Value.unary (Uext (dst_var.size - current_length)) sym_var
+    else if current_length > dst_var.size then (
+      Logger.warning
+        "Destination variable cannot hold new variable with that size. \
+         Truncating..." ;
+      S.Value.unary (Restrict {hi= dst_var.size - 1; lo= 0}) sym_var )
+    else sym_var
+
   (* TODO discuss if correct *)
   let state_constraints (dst_var : Dba.Var.t) _ _ _ state :
       (S.t, status) Result.t =
-    let f a b = S.Value.binary And a b in
     let cnstr =
-      List.fold_left f
-        (S.Value.constant (Bitvector.zeros dst_var.size))
+      List.fold_left (S.Value.binary And)
+        (S.Value.constant Bitvector.zero)
         (S.assertions state)
     in
+    let cnstr = extend_with_warning cnstr 1 dst_var in
     Ok (S.assign dst_var cnstr state)
 
   let solver_concat dst_var sym_var sym_var2 length1 length2 _ path _ state :
@@ -632,8 +647,8 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var2, state =
       S.read ~addr:sym_var2 (length2 / 8) Machine.LittleEndian state
     in
-    (* TODO correct? *)
     let sym_var = S.Value.binary Concat sym_var sym_var2 in
+    let sym_var = extend_with_warning sym_var (length1 + length2) dst_var in
     Ok (S.assign dst_var sym_var state)
 
   let solver_extract dst_var sym_var start end_var length _ path _ state :
@@ -644,8 +659,16 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var, state =
       S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
     in
-    (* TODO actually only take slice *)
-    Ok state
+    let start, state = Eval.safe_eval start state path in
+    let start = Bitvector.to_uint (S.get_value start state) in
+    let end_var, state = Eval.safe_eval end_var state path in
+    let end_var = Bitvector.to_uint (S.get_value end_var state) in
+    (* start 0 means starting from first bit *)
+    let hi = length - 1 - start in
+    let lo = length - 1 - end_var in
+    let sym_var = S.Value.unary (Restrict {hi; lo}) sym_var in
+    let sym_var = extend_with_warning sym_var (end_var - start) dst_var in
+    Ok (S.assign dst_var sym_var state)
 
   (* _solver_ZeroExt - Extends symbolic varible <sym_var> with <to_extend> bits *)
   let solver_zero_ext dst_var sym_var to_extend length _ path _ state :
@@ -658,7 +681,8 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var, state =
       S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
     in
-    let sym_var = S.Value.unary (Uext (length + to_extend)) sym_var in
+    let sym_var = S.Value.unary (Uext to_extend) sym_var in
+    let sym_var = extend_with_warning sym_var (length + to_extend) dst_var in
     Ok (S.assign dst_var sym_var state)
 
   let solver_sign_ext dst_var sym_var to_extend length _ path _ state :
@@ -671,10 +695,17 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var, state =
       S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
     in
-    let sym_var = S.Value.unary (Sext (length + to_extend)) sym_var in
+    let sym_var = S.Value.unary (Sext to_extend) sym_var in
+    let sym_var = extend_with_warning sym_var (length + to_extend) dst_var in
     Ok (S.assign dst_var sym_var state)
 
-  let mem_alloc dst_var size _ path _ state : (S.t, status) Result.t = Ok state
+  (* if size is symbolic, maximize *)
+  (* Use map between constant address and metadata *)
+  let mem_alloc dst_var size _ path _ state : (S.t, status) Result.t =
+    (* *)
+    let heap = P.get key_id path in
+    (* TODO update heap, and assign btivector of base pointer *)
+    P.set key_id heap path ; Ok state
 
   let mem_bytes dst_var ptr _ path _ state : (S.t, status) Result.t = Ok state
 
