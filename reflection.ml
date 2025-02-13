@@ -102,7 +102,7 @@ type builtin +=
   | StateConstraintsBuiltin of Dba.Var.t
 
 (* TODO replace with actual map *)
-type my_heap = (Bitvector.t * int64) list
+type my_heap = (Bitvector.t * Bitvector.t) list
 
 module Reflection (P : Path.S) (S : STATE) :
   Exec.EXTENSION with type path = P.t and type state = S.t = struct
@@ -702,9 +702,16 @@ module Reflection (P : Path.S) (S : STATE) :
   (* if size is symbolic, maximize *)
   (* Use map between constant address and metadata *)
   let mem_alloc dst_var size _ path _ state : (S.t, status) Result.t =
-    let heap = P.get key_id path in
-    (* TODO update heap, and assign bitvector of base pointer *)
-    P.set key_id heap path ; Ok state
+    let heap : my_heap = P.get key_id path in
+    let start : Bitvector.t =
+      match List.rev heap with
+      | [] ->
+          Bitvector.of_int ~size:64 0x40000
+      | (base_ptr, len) :: _ ->
+          Bitvector.add base_ptr len
+    in
+    P.set key_id (heap @ [(start, size)]) path ;
+    Ok (S.assign dst_var (S.Value.constant start) state)
 
   let mem_bytes dst_var ptr _ path _ state : (S.t, status) Result.t =
     let ptr, state = Eval.safe_eval ptr state path in
@@ -713,9 +720,11 @@ module Reflection (P : Path.S) (S : STATE) :
     let base_ptr, len =
       List.find (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr > 0) heap
     in
-    if ptr != base_ptr then
+    if Bitvector.compare (Bitvector.add base_ptr len) ptr > 0 then
+      Logger.error "Getting mem_bytes of freed chunk!" ;
+    if Bitvector.compare ptr base_ptr != 0 then
       Logger.warning "mem_bytes called into the middle of a chunk!" ;
-    Ok (S.assign dst_var (S.Value.constant (Bitvector.of_int64 len)) state)
+    Ok (S.assign dst_var (S.Value.constant len) state)
 
   let mem_free ptr _ path _ state : (S.t, status) Result.t = Ok state
 
