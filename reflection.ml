@@ -699,10 +699,12 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var = extend_with_warning sym_var (length + to_extend) dst_var in
     Ok (S.assign dst_var sym_var state)
 
-  (* if size is symbolic, maximize *)
   (* Use map between constant address and metadata *)
   let mem_alloc dst_var size _ path _ state : (S.t, status) Result.t =
     let heap : my_heap = P.get key_id path in
+    let size, state = Eval.safe_eval size state path in
+    (* TODO maximize if not concrete*)
+    let size = S.get_value size state in
     let start : Bitvector.t =
       match List.rev heap with
       | [] ->
