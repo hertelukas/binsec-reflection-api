@@ -307,9 +307,8 @@ module Reflection (P : Path.S) (S : STATE) :
               (* TODO *)
           | _ ->
               [] )
-        (* TODO use env.word_size to set the size and extend length1 or length2 to that *)
         | SolverIteVar (lval, cond, sym_var, sym_var2, length1, length2) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
               [ Builtin
                   (SolverIteVarBuiltin
@@ -593,6 +592,16 @@ module Reflection (P : Path.S) (S : STATE) :
     let assumption = S.Value.ite cond cnstr1 cnstr2 in
     Ok (S.assign dst_var assumption state)
 
+  let extend_with_warning sym_var current_length (dst_var : Dba.Var.t) =
+    if current_length < dst_var.size then
+      S.Value.unary (Uext (dst_var.size - current_length)) sym_var
+    else if current_length > dst_var.size then (
+      Logger.warning
+        "Destination variable cannot hold new variable with that size. \
+         Truncating..." ;
+      S.Value.unary (Restrict {hi= dst_var.size - 1; lo= 0}) sym_var )
+    else sym_var
+
   let solver_ite_var dst_var cond sym_var sym_var2 length1 length2 _ path _
       state : (S.t, status) Result.t =
     let cond, state = Eval.safe_eval cond state path in
@@ -609,20 +618,11 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var2, state =
       S.read ~addr:sym_var2 (length2 / 8) Machine.LittleEndian state
     in
+    let sym_var = extend_with_warning sym_var length1 dst_var in
+    let sym_var2 = extend_with_warning sym_var2 length2 dst_var in
     let assumption = S.Value.ite cond sym_var sym_var2 in
     Ok (S.assign dst_var assumption state)
 
-  let extend_with_warning sym_var current_length (dst_var : Dba.Var.t) =
-    if current_length < dst_var.size then
-      S.Value.unary (Uext (dst_var.size - current_length)) sym_var
-    else if current_length > dst_var.size then (
-      Logger.warning
-        "Destination variable cannot hold new variable with that size. \
-         Truncating..." ;
-      S.Value.unary (Restrict {hi= dst_var.size - 1; lo= 0}) sym_var )
-    else sym_var
-
-  (* TODO discuss if correct *)
   let state_constraints (dst_var : Dba.Var.t) _ _ _ state :
       (S.t, status) Result.t =
     let cnstr =
