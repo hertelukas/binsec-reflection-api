@@ -728,7 +728,23 @@ module Reflection (P : Path.S) (S : STATE) :
       Logger.warning "mem_bytes called into the middle of a chunk!" ;
     Ok (S.assign dst_var (S.Value.constant len) state)
 
-  let mem_free ptr _ path _ state : (S.t, status) Result.t = Ok state
+  let mem_free ptr _ path _ state : (S.t, status) Result.t =
+    let ptr, state = Eval.safe_eval ptr state path in
+    let ptr = S.get_value ptr state in
+    let heap : my_heap = P.get key_id path in
+    let base_ptr, len =
+      List.find (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr > 0) heap
+    in
+    if Bitvector.compare (Bitvector.add base_ptr len) ptr > 0 then
+      Logger.error "Freeing unallocated chunk!" ;
+    if Bitvector.compare ptr base_ptr != 0 then
+      Logger.warning "mem_free called into the middle of a chunk!" ;
+    P.set key_id
+      (List.filter
+         (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr != 0)
+         heap )
+      path ;
+    Ok state
 
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->

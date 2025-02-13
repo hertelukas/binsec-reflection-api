@@ -46,10 +46,10 @@ binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.s
   + S.get_value
   + If I have a value, return bitvector with that value
 
-** Memory Primitives [1/3]
-- [ ] ~void* mem_alloc(size_t size);~
+** Memory Primitives [3/3]
+- [X] ~void* mem_alloc(size_t size);~
 - [X] ~size_t mem_bytes(void* ptr);~
-- [ ] ~void mem_free(void* ptr);~
+- [X] ~void mem_free(void* ptr);~
 
 ** Symbolic Value Primitives [4/4]
 - [X] ~symbolic _solver_Concat(symbolic sym_var, symbolic sym_var2, size_t length1, size_t length2);~
