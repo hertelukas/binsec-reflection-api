@@ -589,7 +589,9 @@ module Reflection (P : Path.S) (S : STATE) :
     let cond, state = Eval.safe_eval cond state path in
     let cnstr1, state = Eval.safe_eval cnstr1 state path in
     let cnstr2, state = Eval.safe_eval cnstr2 state path in
-    let assumption = S.Value.ite cond cnstr1 cnstr2 in
+    let assumption =
+      S.Value.ite (S.Value.unary (Restrict {hi= 0; lo= 0}) cond) cnstr1 cnstr2
+    in
     Ok (S.assign dst_var assumption state)
 
   let extend_with_warning sym_var current_length (dst_var : Dba.Var.t) =
@@ -620,7 +622,11 @@ module Reflection (P : Path.S) (S : STATE) :
     in
     let sym_var = extend_with_warning sym_var length1 dst_var in
     let sym_var2 = extend_with_warning sym_var2 length2 dst_var in
-    let assumption = S.Value.ite cond sym_var sym_var2 in
+    let assumption =
+      S.Value.ite
+        (S.Value.unary (Restrict {hi= 0; lo= 0}) cond)
+        sym_var sym_var2
+    in
     Ok (S.assign dst_var assumption state)
 
   let state_constraints (dst_var : Dba.Var.t) _ _ _ state :
