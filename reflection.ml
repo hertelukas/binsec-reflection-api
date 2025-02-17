@@ -197,7 +197,7 @@ module Reflection (P : Path.S) (S : STATE) :
           | _ ->
               [] )
         | MemBytes (lval, ptr) -> (
-          match Script.eval_loc lval env with
+          match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
               [Builtin (MemBytesBuiltin (var, Script.eval_expr ptr env))]
               (* TODO other cases *)
