@@ -754,29 +754,33 @@ module Reflection (P : Path.S) (S : STATE) :
   let mem_free ptr _ path _ state : (S.t, status) Result.t =
     let ptr, state = Eval.safe_eval ptr state path in
     let ptr = S.get_value ptr state in
-    let heap : my_heap = P.get key_id path in
-    Logger.debug "Heap before freeing %s: %s" (Bitvector.to_string ptr)
-      (heap_to_string heap) ;
-    try
-      let base_ptr, len =
-        List.find
-          (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr == 0)
-          heap
-      in
-      Logger.debug "Freeing chunk (%s, %s)"
-        (Bitvector.to_string base_ptr)
-        (Bitvector.to_string len) ;
-      P.set key_id
-        (List.filter
-           (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr != 0)
-           heap )
-        path ;
-      Logger.debug "New heap after free: %s"
-        (heap_to_string (P.get key_id path)) ;
-      Ok state
-    with Not_found ->
-      Logger.warning "No chunk at %s to free" (Bitvector.to_string ptr) ;
-      Error Cut
+    if Bitvector.is_zeros ptr then (
+      Logger.debug "Free is NOP with 0-pointer" ;
+      Ok state )
+    else
+      let heap : my_heap = P.get key_id path in
+      Logger.debug "Heap before freeing %s: %s" (Bitvector.to_string ptr)
+        (heap_to_string heap) ;
+      try
+        let base_ptr, len =
+          List.find
+            (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr == 0)
+            heap
+        in
+        Logger.debug "Freeing chunk (%s, %s)"
+          (Bitvector.to_string base_ptr)
+          (Bitvector.to_string len) ;
+        P.set key_id
+          (List.filter
+             (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr != 0)
+             heap )
+          path ;
+        Logger.debug "New heap after free: %s"
+          (heap_to_string (P.get key_id path)) ;
+        Ok state
+      with Not_found ->
+        Logger.warning "No chunk at %s to free" (Bitvector.to_string ptr) ;
+        Error Cut
 
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
