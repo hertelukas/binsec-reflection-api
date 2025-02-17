@@ -537,7 +537,9 @@ module Reflection (P : Path.S) (S : STATE) :
     let cnstr, state = Eval.safe_eval cnstr state path in
     let assume_true =
       (* Not sure if I can compare unequally sized values though *)
-      S.Value.binary Eq cnstr (S.Value.constant Bitvector.one)
+      S.Value.binary Eq
+        (S.Value.unary (Restrict {hi= 0; lo= 0}) cnstr)
+        (S.Value.constant Bitvector.one)
     in
     match S.assume assume_true state with
     | Some _ ->
