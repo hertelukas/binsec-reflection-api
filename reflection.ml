@@ -705,12 +705,22 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var = extend_with_warning sym_var (length + to_extend) dst_var in
     Ok (S.assign dst_var sym_var state)
 
+  let entry_to_string (start, size) =
+    Printf.sprintf "(%s, %s)"
+      (Bitvector.to_string start)
+      (Bitvector.to_string size)
+
+  let heap_to_string heap =
+    "[" ^ String.concat "; " (List.map entry_to_string heap) ^ "]"
+
   (* Use map between constant address and metadata *)
   let mem_alloc dst_var size _ path _ state : (S.t, status) Result.t =
     let heap : my_heap = P.get key_id path in
     let size, state = Eval.safe_eval size state path in
     (* TODO maximize if not concrete*)
     let size = S.get_value size state in
+    Logger.debug "Heap before allocating %s bytes: %s"
+      (Bitvector.to_string size) (heap_to_string heap) ;
     let start : Bitvector.t =
       match List.rev heap with
       | [] ->
@@ -719,38 +729,52 @@ module Reflection (P : Path.S) (S : STATE) :
           Bitvector.add base_ptr len
     in
     P.set key_id (heap @ [(start, size)]) path ;
+    Logger.debug "New heap after allocation: %s"
+      (heap_to_string (heap @ [(start, size)])) ;
     Ok (S.assign dst_var (S.Value.constant start) state)
 
   let mem_bytes dst_var ptr _ path _ state : (S.t, status) Result.t =
     let ptr, state = Eval.safe_eval ptr state path in
     let ptr = S.get_value ptr state in
+    Logger.debug "Loading mem_bytes for %s" (Bitvector.to_string ptr) ;
     let heap : my_heap = P.get key_id path in
-    let base_ptr, len =
-      List.find (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr > 0) heap
-    in
-    if Bitvector.compare (Bitvector.add base_ptr len) ptr > 0 then
-      Logger.error "Getting mem_bytes of freed chunk!" ;
-    if Bitvector.compare ptr base_ptr != 0 then
-      Logger.warning "mem_bytes called into the middle of a chunk!" ;
-    Ok (S.assign dst_var (S.Value.constant len) state)
+    try
+      let _, len =
+        List.find
+          (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr == 0)
+          heap
+      in
+      Ok (S.assign dst_var (S.Value.constant len) state)
+    with Not_found ->
+      Logger.warning "No chunk at %s to get size of" (Bitvector.to_string ptr) ;
+      Error Cut
 
   let mem_free ptr _ path _ state : (S.t, status) Result.t =
     let ptr, state = Eval.safe_eval ptr state path in
     let ptr = S.get_value ptr state in
     let heap : my_heap = P.get key_id path in
-    let base_ptr, len =
-      List.find (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr > 0) heap
-    in
-    if Bitvector.compare (Bitvector.add base_ptr len) ptr > 0 then
-      Logger.error "Freeing unallocated chunk!" ;
-    if Bitvector.compare ptr base_ptr != 0 then
-      Logger.warning "mem_free called into the middle of a chunk!" ;
-    P.set key_id
-      (List.filter
-         (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr != 0)
-         heap )
-      path ;
-    Ok state
+    Logger.debug "Heap before freeing %s: %s" (Bitvector.to_string ptr)
+      (heap_to_string heap) ;
+    try
+      let base_ptr, len =
+        List.find
+          (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr == 0)
+          heap
+      in
+      Logger.debug "Freeing chunk (%s, %s)"
+        (Bitvector.to_string base_ptr)
+        (Bitvector.to_string len) ;
+      P.set key_id
+        (List.filter
+           (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr != 0)
+           heap )
+        path ;
+      Logger.debug "New heap after free: %s"
+        (heap_to_string (P.get key_id path)) ;
+      Ok state
+    with Not_found ->
+      Logger.warning "No chunk at %s to free" (Bitvector.to_string ptr) ;
+      Error Cut
 
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
