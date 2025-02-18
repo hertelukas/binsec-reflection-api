@@ -590,7 +590,9 @@ module Reflection (P : Path.S) (S : STATE) :
       (S.t, status) Result.t =
     let cond, state = Eval.safe_eval cond state path in
     let cnstr1, state = Eval.safe_eval cnstr1 state path in
+    let cnstr1 = S.Value.unary (Restrict {hi= 0; lo= 0}) cnstr1 in
     let cnstr2, state = Eval.safe_eval cnstr2 state path in
+    let cnstr2 = S.Value.unary (Restrict {hi= 0; lo= 0}) cnstr2 in
     let assumption =
       S.Value.ite (S.Value.unary (Restrict {hi= 0; lo= 0}) cond) cnstr1 cnstr2
     in
