@@ -28,8 +28,26 @@ def plot_paths(data):
 
 
 # Calculating speedup
-def plot_speedup(data):
+def plot_speedup_regression(data):
     plt.figure()
+    df_c = data[data["Summary"] == "C"]
+    df_concrete = data[data["Summary"] == "Concrete"]
+
+    merged_df = pd.merge(
+        df_c, df_concrete, on=["Tool", "Test"], suffixes=("_C", "_Concrete")
+    )
+
+    merged_df["Speedup"] = merged_df["Time (s)_Concrete"] / merged_df["Time (s)_C"]
+
+    result = merged_df[["Tool", "Test", "Time (s)_C", "Time (s)_Concrete", "Speedup"]]
+
+    sns.lmplot(x="Time (s)_Concrete", hue="Tool", y="Speedup", data=result, logx=True, height=5, aspect=1.5)
+    plt.xscale("log")
+    plt.xlabel("Time (s)")
+    plt.savefig("speedup_regression.pdf", format="pdf")
+
+def plot_speedup(data):
+    plt.figure(figsize=(10,5))
     df_c = data[data["Summary"] == "C"]
     df_concrete = data[data["Summary"] == "Concrete"]
 
@@ -48,7 +66,7 @@ def plot_speedup(data):
 
 # Calculating path improvement
 def plot_path_improvement(data):
-    plt.figure()
+    plt.figure(figsize=(10, 5))
     df_c = data[data["Summary"] == "C"]
     df_concrete = data[data["Summary"] == "Concrete"]
 
@@ -78,4 +96,5 @@ if __name__ == "__main__":
     plot_time(data)
     plot_paths(data)
     plot_speedup(data)
+    plot_speedup_regression(data)
     plot_path_improvement(data)
