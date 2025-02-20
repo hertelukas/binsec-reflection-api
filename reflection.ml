@@ -576,6 +576,7 @@ module Reflection (P : Path.S) (S : STATE) :
 
   let solver_not dst_var cnstr _ path _ state : (S.t, status) Result.t =
     let cnstr, state = Eval.safe_eval cnstr state path in
+    let cnstr = S.Value.unary (Restrict {hi= 0; lo= 0}) cnstr in
     Ok (S.assign dst_var (S.Value.unary Not cnstr) state)
 
   let solver_and_or (dst_var : Dba.Var.t) cnstr1 cnstr2 op _ path _ state :
