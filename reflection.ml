@@ -463,6 +463,9 @@ module Reflection (P : Path.S) (S : STATE) :
           (* Doing it this way avoids overflows, but is just (l + r) / 2 *)
           Bitvector.add (Bitvector.shift_right l 1) (Bitvector.shift_right r 1)
         in
+        Logger.debug "mid: %s" (Bitvector.to_hexstring mid) ;
+        Logger.debug "sym_var: %s"
+          (Bitvector.to_hexstring (S.get_a_value sym_var state)) ;
         (* max: assume that sym_var bigger than our current mid exists *)
         (* min: assume that sym_var smaller than our current mid exists *)
         let assumed_bigger =
@@ -567,7 +570,9 @@ module Reflection (P : Path.S) (S : STATE) :
   let solver_and_or (dst_var : Dba.Var.t) cnstr1 cnstr2 op _ path _ state :
       (S.t, status) Result.t =
     let cnstr1, state = Eval.safe_eval cnstr1 state path in
+    let cnstr1 = S.Value.unary (Restrict {hi= 0; lo= 0}) cnstr1 in
     let cnstr2, state = Eval.safe_eval cnstr2 state path in
+    let cnstr2 = S.Value.unary (Restrict {hi= 0; lo= 0}) cnstr2 in
     let assumption = S.Value.binary op cnstr1 cnstr2 in
     Ok (S.assign dst_var assumption state)
 
