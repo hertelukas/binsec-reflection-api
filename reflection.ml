@@ -59,6 +59,7 @@ type Ast.Instr.t +=
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
       * Ast.Expr.t Ast.loc
+  | SolverNot of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc
   | SolverOr of Ast.Loc.t Ast.loc * Ast.Expr.t Ast.loc * Ast.Expr.t Ast.loc
   | SolverSignExt of
       Ast.Loc.t Ast.loc
@@ -96,6 +97,7 @@ type builtin +=
   | SolverIteBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
   | SolverIteVarBuiltin of
       Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
+  | SolverNotBuiltin of Dba.Var.t * Dba.Expr.t
   | SolverOrBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t
   | SolverSignExtBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
   | SolverZeroExtBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
@@ -321,6 +323,12 @@ module Reflection (P : Path.S) (S : STATE) :
               (* TODO *)
           | _ ->
               [] )
+        | SolverNot (lval, cnstr) -> (
+          match Script.eval_loc ~size:1 lval env with
+          | Var var ->
+              [Builtin (SolverNotBuiltin (var, Script.eval_expr cnstr env))]
+          | _ ->
+              [] )
         | SolverSignExt (lval, sym_var, to_extend, length) -> (
           match Script.eval_loc ~size:env.wordsize lval env with
           | Var var ->
@@ -539,7 +547,6 @@ module Reflection (P : Path.S) (S : STATE) :
       =
     let cnstr, state = Eval.safe_eval cnstr state path in
     let assume_true =
-      (* Not sure if I can compare unequally sized values though *)
       S.Value.binary Eq
         (S.Value.unary (Restrict {hi= 0; lo= 0}) cnstr)
         (S.Value.constant Bitvector.one)
@@ -566,6 +573,10 @@ module Reflection (P : Path.S) (S : STATE) :
     let byte, state = Eval.safe_eval byte state path in
     Logger.info "%a" (S.pp_smt (Some [(byte, "my_byte")])) state ;
     Ok state
+
+  let solver_not dst_var cnstr _ path _ state : (S.t, status) Result.t =
+    let cnstr, state = Eval.safe_eval cnstr state path in
+    Ok (S.assign dst_var (S.Value.unary Not cnstr) state)
 
   let solver_and_or (dst_var : Dba.Var.t) cnstr1 cnstr2 op _ path _ state :
       (S.t, status) Result.t =
@@ -842,6 +853,8 @@ module Reflection (P : Path.S) (S : STATE) :
           Some (solver_ite lval cond cnstr1 cnstr2)
       | SolverIteVarBuiltin (lval, cond, sym_var, sym_var2, length1, length2) ->
           Some (solver_ite_var lval cond sym_var sym_var2 length1 length2)
+      | SolverNotBuiltin (lval, cnstr) ->
+          Some (solver_not lval cnstr)
       | SolverSignExtBuiltin (lval, sym_var, to_extend, length) ->
           Some (solver_sign_ext lval sym_var to_extend length)
       | SolverZeroExtBuiltin (lval, sym_var, to_extend, length) ->
@@ -1194,7 +1207,7 @@ let () =
                     ; _
                     ; Libparser.Syntax.Expr cnstr
                     ; _ ] ->
-                      (Libparser.Syntax.Instr (IsSat (lval, cnstr)), [])
+                      (Libparser.Syntax.Instr (SolverNot (lval, cnstr)), [])
                   | _ ->
                       assert false )
             ; ( loc_expr_expr_parser "_solver_Or"
