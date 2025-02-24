@@ -72,6 +72,7 @@ def plot_speedup(data, dataset="DStrings"):
 
     sns.barplot(x="Test", hue="Tool", y="Speedup", data=result)
     plt.yscale("log")
+    plt.tight_layout()
     plt.savefig(f"speedup_{dataset}.pdf", format="pdf")
 
 
@@ -97,6 +98,7 @@ def plot_path_improvement(data, dataset="DStrings"):
 
     sns.barplot(x="Test", hue="Tool", y="Path Improvement", data=result)
     plt.yscale("log")
+    plt.tight_layout()
     plt.savefig(f"path_improvement_{dataset}.pdf", format="pdf")
 
 
@@ -104,6 +106,7 @@ if __name__ == "__main__":
     primary_color = "#002F6C"
     secondary_color = "#DC4605"
     sns.set_palette([primary_color, secondary_color])
+    plt.rcParams.update({'font.size': 15})
 
     # Read the data
     data = pd.read_csv("results2.csv")
@@ -111,10 +114,10 @@ if __name__ == "__main__":
     data.loc[data["Tool"] == "Binsec", "Time (s)"] = data["Time (s) multi-checks"]
     data["Time (s)"] = pd.to_numeric(data["Time (s)"], errors="coerce")
 
-    plot_time(data)
-    plot_paths(data)
+    # plot_time(data)
+    # plot_paths(data)
     plot_speedup(data)
     plot_speedup(data, "HashMap")
-    plot_speedup_regression(data)
+    # plot_speedup_regression(data)
     plot_path_improvement(data)
     plot_path_improvement(data, "HashMap")
