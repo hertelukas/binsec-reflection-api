@@ -103,8 +103,7 @@ type builtin +=
   | SolverZeroExtBuiltin of Dba.Var.t * Dba.Expr.t * Dba.Expr.t * Dba.Expr.t
   | StateConstraintsBuiltin of Dba.Var.t
 
-(* TODO replace with actual map *)
-type my_heap = (Bitvector.t * Bitvector.t) list
+module Heap = Map.Make (Bitvector)
 
 module Reflection (P : Path.S) (S : STATE) :
   Exec.EXTENSION with type path = P.t and type state = S.t = struct
@@ -114,7 +113,10 @@ module Reflection (P : Path.S) (S : STATE) :
 
   module Eval = Eval.Make (P) (S)
 
-  let key_id = P.register_key []
+  let key_id =
+    P.register_key
+      ( (Heap.empty, Bitvector.of_int ~size:64 0x40000)
+        : Bitvector.t Heap.t * Bitvector.t )
 
   let initialization_callback = None
 
@@ -731,44 +733,34 @@ module Reflection (P : Path.S) (S : STATE) :
       (Bitvector.to_string start)
       (Bitvector.to_string size)
 
-  let heap_to_string heap =
+  let heap_to_string (heap : Bitvector.t Heap.t) : string =
+    let heap = Heap.bindings heap in
     "[" ^ String.concat "; " (List.map entry_to_string heap) ^ "]"
 
-  (* Use map between constant address and metadata *)
   let mem_alloc dst_var size _ path _ state : (S.t, status) Result.t =
-    let heap : my_heap = P.get key_id path in
+    let heap, start = P.get key_id path in
     let size, state = Eval.safe_eval size state path in
     (* TODO maximize if not concrete*)
     let size = S.get_value size state in
     Logger.debug "Heap before allocating %s bytes: %s"
       (Bitvector.to_string size) (heap_to_string heap) ;
-    let start : Bitvector.t =
-      match List.rev heap with
-      | [] ->
-          Bitvector.of_int ~size:64 0x40000
-      | (base_ptr, len) :: _ ->
-          Bitvector.add base_ptr len
-    in
-    P.set key_id (heap @ [(start, size)]) path ;
+    let next_start = Bitvector.add start size in
+    P.set key_id (heap |> Heap.add start size, next_start) path ;
     Logger.debug "New heap after allocation: %s"
-      (heap_to_string (heap @ [(start, size)])) ;
+      (heap_to_string (heap |> Heap.add start size)) ;
     Ok (S.assign dst_var (S.Value.constant start) state)
 
   let mem_bytes dst_var ptr _ path _ state : (S.t, status) Result.t =
     let ptr, state = Eval.safe_eval ptr state path in
     let ptr = S.get_value ptr state in
     Logger.debug "Loading mem_bytes for %s" (Bitvector.to_string ptr) ;
-    let heap : my_heap = P.get key_id path in
-    try
-      let _, len =
-        List.find
-          (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr == 0)
-          heap
-      in
-      Ok (S.assign dst_var (S.Value.constant len) state)
-    with Not_found ->
-      Logger.warning "No chunk at %s to get size of" (Bitvector.to_string ptr) ;
-      Error Cut
+    let heap, _ = P.get key_id path in
+    match Heap.find_opt ptr heap with
+    | Some size ->
+        Ok (S.assign dst_var (S.Value.constant size) state)
+    | None ->
+        Logger.warning "No chunk at %s to get size of" (Bitvector.to_string ptr) ;
+        Error Cut
 
   let mem_free ptr _ path _ state : (S.t, status) Result.t =
     let ptr, state = Eval.safe_eval ptr state path in
@@ -777,29 +769,20 @@ module Reflection (P : Path.S) (S : STATE) :
       Logger.debug "Free is NOP with 0-pointer" ;
       Ok state )
     else
-      let heap : my_heap = P.get key_id path in
+      let heap, start = P.get key_id path in
       Logger.debug "Heap before freeing %s: %s" (Bitvector.to_string ptr)
         (heap_to_string heap) ;
-      try
-        let base_ptr, len =
-          List.find
-            (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr == 0)
-            heap
-        in
-        Logger.debug "Freeing chunk (%s, %s)"
-          (Bitvector.to_string base_ptr)
-          (Bitvector.to_string len) ;
-        P.set key_id
-          (List.filter
-             (fun (list_ptr, _) -> Bitvector.compare list_ptr ptr != 0)
-             heap )
-          path ;
-        Logger.debug "New heap after free: %s"
-          (heap_to_string (P.get key_id path)) ;
-        Ok state
-      with Not_found ->
-        Logger.warning "No chunk at %s to free" (Bitvector.to_string ptr) ;
-        Error Cut
+      match Heap.find_opt ptr heap with
+      | Some size ->
+          Logger.debug "Freeing chunk (%s, %s)" (Bitvector.to_string ptr)
+            (Bitvector.to_string size) ;
+          P.set key_id (heap |> Heap.remove ptr, start) path ;
+          Logger.debug "New heap after free: %s"
+            (heap_to_string (fst (P.get key_id path))) ;
+          Ok state
+      | None ->
+          Logger.warning "No chunk at %s to free" (Bitvector.to_string ptr) ;
+          Error Cut
 
   (* Perform action of builtin, so here call get_value *)
   (* (Ir.builtin ->
