@@ -418,7 +418,7 @@ module Reflection (P : Path.S) (S : STATE) :
     in
     match S.get_value sym_var state with
     | exception Non_unique ->
-        (* Value is concrete *)
+        (* Value is symbolic *)
         let new_state =
           S.assign dst_var
             (S.Value.constant (Bitvector.ones dst_var.size))
@@ -426,7 +426,7 @@ module Reflection (P : Path.S) (S : STATE) :
         in
         Ok new_state
     | _ ->
-        (* Value is symbolic *)
+        (* Value is concrete *)
         let new_state =
           S.assign dst_var
             (S.Value.constant (Bitvector.zeros dst_var.size))
@@ -443,67 +443,77 @@ module Reflection (P : Path.S) (S : STATE) :
     let sym_var, state =
       S.read ~addr:sym_var (length / 8) Machine.LittleEndian state
     in
-    Logger.debug "Length is %d" length ;
-    let l = Bitvector.zeros length in
-    let r = Bitvector.fill length in
-    let cmp = if max then Uge else Ule in
-    let rec binary_search (l : Bitvector.t) (r : Bitvector.t) state
-        (sym_var : S.Value.t) =
-      Logger.debug "l: %s, r: %s" (Bitvector.to_hexstring l)
-        (Bitvector.to_hexstring r) ;
-      if Bitvector.ugt l r then (
-        Logger.error "No value found" ;
-        state )
-      else if Bitvector.equal l r then (
-        Logger.debug "Found value: %s" (Bitvector.to_hexstring l) ;
-        (* max: found max value, however, can be the one or one lower *)
-        (* min: found min value, however, can be the one or one higher *)
-        let assumed_bigger = S.Value.binary cmp sym_var (S.Value.constant l) in
-        match S.assume assumed_bigger state with
-        | Some _ ->
-            S.assign dst_var (S.Value.constant l) state
-        | None ->
-            S.assign dst_var
-              ( if max then
-                  S.Value.constant (Bitvector.sub l (Bitvector.ones length))
-                else S.Value.constant (Bitvector.add_int l 1) )
-              state )
-      else
-        let mid =
-          (* Doing it this way avoids overflows, but is just (l + r) / 2 *)
-          Bitvector.add (Bitvector.shift_right l 1) (Bitvector.shift_right r 1)
+    match S.get_value sym_var state with
+    | exception Non_unique ->
+        (* Value is symbolic, hence we need to search *)
+        Logger.debug "Length is %d" length ;
+        let l = Bitvector.zeros length in
+        let r = Bitvector.fill length in
+        let cmp = if max then Uge else Ule in
+        let rec binary_search (l : Bitvector.t) (r : Bitvector.t) state
+            (sym_var : S.Value.t) =
+          Logger.debug "l: %s, r: %s" (Bitvector.to_hexstring l)
+            (Bitvector.to_hexstring r) ;
+          if Bitvector.ugt l r then (
+            Logger.error "No value found" ;
+            state )
+          else if Bitvector.equal l r then (
+            Logger.debug "Found value: %s" (Bitvector.to_hexstring l) ;
+            (* max: found max value, however, can be the one or one lower *)
+            (* min: found min value, however, can be the one or one higher *)
+            let assumed_bigger =
+              S.Value.binary cmp sym_var (S.Value.constant l)
+            in
+            match S.assume assumed_bigger state with
+            | Some _ ->
+                S.assign dst_var (S.Value.constant l) state
+            | None ->
+                S.assign dst_var
+                  ( if max then
+                      S.Value.constant (Bitvector.sub l (Bitvector.ones length))
+                    else S.Value.constant (Bitvector.add_int l 1) )
+                  state )
+          else
+            let mid =
+              (* Doing it this way avoids overflows, but is just (l + r) / 2 *)
+              Bitvector.add
+                (Bitvector.shift_right l 1)
+                (Bitvector.shift_right r 1)
+            in
+            Logger.debug "mid: %s" (Bitvector.to_hexstring mid) ;
+            Logger.debug "sym_var: %s"
+              (Bitvector.to_hexstring (S.get_a_value sym_var state)) ;
+            (* max: assume that sym_var bigger than our current mid exists *)
+            (* min: assume that sym_var smaller than our current mid exists *)
+            let assumed_bigger =
+              S.Value.binary cmp sym_var (S.Value.constant mid)
+            in
+            match S.assume assumed_bigger state with
+            | Some _ ->
+                if max then (
+                  Logger.debug "Mid too small" ;
+                  (* We found something, so we can go higher *)
+                  binary_search (Bitvector.add_int mid 1) r state sym_var )
+                else (
+                  Logger.debug "" ;
+                  (* We found something, so our mid is too high *)
+                  binary_search l
+                    (Bitvector.sub mid (Bitvector.ones length))
+                    state sym_var )
+            | None ->
+                if max then (
+                  Logger.debug "Mid too high" ;
+                  (* We found nothing, so our mid is too high *)
+                  binary_search l
+                    (Bitvector.sub mid (Bitvector.ones length))
+                    state sym_var )
+                else binary_search (Bitvector.add_int mid 1) r state sym_var
         in
-        Logger.debug "mid: %s" (Bitvector.to_hexstring mid) ;
-        Logger.debug "sym_var: %s"
-          (Bitvector.to_hexstring (S.get_a_value sym_var state)) ;
-        (* max: assume that sym_var bigger than our current mid exists *)
-        (* min: assume that sym_var smaller than our current mid exists *)
-        let assumed_bigger =
-          S.Value.binary cmp sym_var (S.Value.constant mid)
-        in
-        match S.assume assumed_bigger state with
-        | Some _ ->
-            if max then (
-              Logger.debug "Mid too small" ;
-              (* We found something, so we can go higher *)
-              binary_search (Bitvector.add_int mid 1) r state sym_var )
-            else (
-              Logger.debug "" ;
-              (* We found something, so our mid is too high *)
-              binary_search l
-                (Bitvector.sub mid (Bitvector.ones length))
-                state sym_var )
-        | None ->
-            if max then (
-              Logger.debug "Mid too high" ;
-              (* We found nothing, so our mid is too high *)
-              binary_search l
-                (Bitvector.sub mid (Bitvector.ones length))
-                state sym_var )
-            else binary_search (Bitvector.add_int mid 1) r state sym_var
-    in
-    let state = binary_search l r state sym_var in
-    Ok state
+        let state = binary_search l r state sym_var in
+        Ok state
+    | concrete ->
+        let new_state = S.assign dst_var (S.Value.constant concrete) state in
+        Ok new_state
 
   let new_sym_var_from_tmp (dst_var : Dba.Var.t) tmp length_int state path :
       (S.t, status) Result.t =
