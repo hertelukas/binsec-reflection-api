@@ -115,6 +115,7 @@ module Reflection (P : Path.S) (S : STATE) :
 
   let key_id =
     P.register_key
+      (* TODO use wordsize *)
       ( (Heap.empty, Bitvector.of_int ~size:64 0x40000)
         : Bitvector.t Heap.t * Bitvector.t )
 
