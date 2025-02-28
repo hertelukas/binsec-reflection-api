@@ -1,80 +1,36 @@
-* binsec-reflection-api
+* BINSEC Tool-Independent Summaries Plugin
 
-** Running the Example
+This BINSEC plugin implements the API proposed by Ramos et al. in their [[https://drops.dagstuhl.de/storage/00lipics/lipics-vol263-ecoop2023/LIPIcs.ECOOP.2023.24/LIPIcs.ECOOP.2023.24.pdf][paper]]
+on tool-independent summaries. It supports calls to the symbolic reflection API,
+enabling direct manipulation of symbolic state from C code.
 
+This approach allows different symbolic execution engines to share their
+summaries, eliminating the need to manually writ them for each tool - a process
+that is both cumbersome and prone to errors.
+
+Summaries  make symbolic execution significantly faster (up to 10'000x for
+BINSEC) and prevent many executions from timing out, making analysis feasible
+in cases that would otherwise be impractical. This speedup comes from
+drastically reducing the number of paths (up to 100,000x fewer for BINSEC) by
+encoding functions like those from the ~libc~ as symbolic expression over their
+inputs. For example, rather than introducing a new path for each character in
+a string for ~strlen~, the plugin can use a symbolic variable to represent the
+string's length as a single expression, constructed by nesting multiple
+if-then-else cases.
+
+** Using the Plugin
+*** Installation
 #+begin_src bash
-cd examples
-make
-binsec -sse -isa amd64 -reflection -sse-script is_symbolic.ini bin/is_symbolic.snapshot
+dune build
+dune install
+#+end_src
+
+*** Run BINSEC witht he plugin
+#+begin_src bash
+binsec -sse -reflection <args>
 #+end_src
 
 * Primitives
-** Core Reflection Primitives [12/13]
-- [X] ~void error(char *msg);~
-  + As builtin
-  + See new_sym_var_named
-  + Logger.error to print
-  + If it is always the end, instead Ok State return Err "reason"
-- [X] ~cnstr_t state_constraints();~
-  + Use state.assertion to get list of every assertion
-  + Create and of all expressions
-  + Extend to size of container
-- [X] ~void print_byte(char byte);~
-- [X] ~void print_constraint(cnstr_t cnstr);~
-- [X] ~size_t maximize(void* sym_var, size_t length);~
-  + Find biggest value that is possible
-  + Binary search
-  + We assume that it is greater or smaller, check if it is solvable with State.assume
-  + Adapt range, repeat
-  + State.value.binary uge ule...
-- [X] ~size_t minimize(void* sym_var, size_t length);~
-- [X] ~int is_symbolic(symbolic sym_var, size_t length);~
-  + Created as builtin
-- [X] ~symbolic new_sym_var(size_t length);~
-  + Create as builtin, directly as length
-  + Then, extend to 64 bit in DBA
-- [X] ~symbolic new_sym_var_named(char* name, size_t length);~
-  + Also as builtin
-- [ ] ~symbolic new_sym_var_array(char* name, size_t index, size_t size);~
-- [X] ~int is_sat(cnstr_t cnstr);~
-  + Also as builtin, evaluate constraint
-  + State.assume, if returns some, true; none, false
-- [X] ~void assume(cnstr_t cnstr);~
-  + Already exists like assert
-- [X] ~long eval(symbolic var, size_t length, cnstr_t extra);~
-  + Assume extra (but do not update the state)
-  + S.get_value
-  + If I have a value, return bitvector with that value
 
-** Memory Primitives [3/3]
-- [X] ~void* mem_alloc(size_t size);~
-- [X] ~size_t mem_bytes(void* ptr);~
-- [X] ~void mem_free(void* ptr);~
-
-** Symbolic Value Primitives [4/4]
-- [X] ~symbolic _solver_Concat(symbolic sym_var, symbolic sym_var2, size_t length1, size_t length2);~
-- [X] ~symbolic _solver_Extract(symbolic sym_var, size_t start, size_t end, size_t length);~
-- [X] ~symbolic _solver_ZeroExt(symbolic sym_var, size_t to_extend, size_t length);~
-- [X] ~symbolic _solver_SignExt(symbolic sym_var, size_t to_extend, size_t length);~
-
-** Constraint Primitives [11/11]
-- [X] ~cnstr_t _solver_NOT(cnstr_t cnstr1);~
-- [X] ~cnstr_t _solver_Or(cnstr_t cnstr1, cnstr_t cnstr2);~
-- [X] ~cnstr_t _solver_And(cnstr_t cnstr1, cnstr_t cnstr2);~
-- [X] ~cnstr_t _solver_EQ(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [X] ~cnstr_t _solver_NEQ(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [X] ~cnstr_t _solver_LT(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [X] ~cnstr_t _solver_LE(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [X] ~cnstr_t _solver_SLT(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [X] ~cnstr_t _solver_SLE(symbolic sym_var, symbolic sym_var2, size_t length);~
-- [X] ~cnstr_t _solver_ITE(cnstr_t cond, cnstr_t cnstr1, cnstr_t cnstr2);~
-- [X] ~symbolic _solver_ITE_VAR(cnstr_t cond, symbolic sym_var, symbolic sym_var2, size_t length1, size_t length2);~
-
-** Summary Validation [0/7]
-- [ ] ~state_t save_current_state();~
-- [ ] ~void mem_addr(char* name, void* addr, size_t n);~
-- [ ] ~cnstr_t get_cnstr(symbolic var, size_t size);~
-- [ ] ~void store_cnstr(char* name, cnstr_t constraint);~
-- [ ] ~void halt_all(state_t state);~
-- [ ] ~result_t check_implications(char* constraint1, char* constraint2);~
-- [ ] ~void print_counterexamples(result_t result);~
+All primitives are implemented, except for ~new_sym_var_array~ and all
+the summary validation primitives.
