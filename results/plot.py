@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 
 def plot_time(data):
@@ -68,9 +69,29 @@ def plot_speedup(data, dataset="DStrings"):
 
     merged_df["Speedup"] = merged_df["Time (s)_Concrete"] / merged_df["Time (s)_C"]
 
-    result = merged_df[["Tool", "Test", "Time (s)_C", "Time (s)_Concrete", "Speedup"]]
+    df = merged_df[["Tool", "Test", "Speedup"]]
 
-    sns.barplot(x="Test", hue="Tool", y="Speedup", data=result)
+    plot_df = df.copy()
+    plot_df["Speedup"] = plot_df["Speedup"].fillna(0)
+    ax = sns.barplot(x="Test", hue="Tool", y="Speedup", data=plot_df)
+
+    for i, row in df.iterrows():
+        if pd.isna(row['Speedup']):
+            # Get the bar location (x position for the Test and Tool group)
+            bars = ax.patches[i]
+            # Add a red-striped bar at the same position with a hatch pattern
+            ax.add_patch(
+                patches.Rectangle(
+                    (bars.get_x(), 0),    # Start position of the bar
+                    bars.get_width(),     # Width of the bar
+                    ax.get_ylim()[1],     # Maximum y-limit for the bar height
+                    hatch='///',          # Hatch pattern for stripes
+                    fill=False,           # No fill color
+                    edgecolor='red',      # Red color for stripes
+                    linewidth=1
+                )
+            )
+
     plt.yscale("log")
     plt.tight_layout()
     plt.savefig(f"speedup_{dataset}.pdf", format="pdf")
@@ -92,11 +113,32 @@ def plot_path_improvement(data, dataset="DStrings"):
 
     merged_df["Path Improvement"] = merged_df["Paths_Concrete"] / merged_df["Paths_C"]
 
-    result = merged_df[
-        ["Tool", "Test", "Paths_C", "Paths_Concrete", "Path Improvement"]
+    df = merged_df[
+        ["Tool", "Test", "Path Improvement"]
     ]
 
-    sns.barplot(x="Test", hue="Tool", y="Path Improvement", data=result)
+    plot_df = df.copy()
+    # Thats a bit hacky, but we need seaborn to draw the bar, so that we can patch it
+    plot_df["Path Improvement"] = plot_df["Path Improvement"].fillna(0)
+    ax = sns.barplot(x="Test", hue="Tool", y="Path Improvement", data=plot_df)
+
+    for i, row in df.iterrows():
+        if pd.isna(row['Path Improvement']):
+            # Get the bar location (x position for the Test and Tool group)
+            bars = ax.patches[i]
+            # Add a red-striped bar at the same position with a hatch pattern
+            ax.add_patch(
+                patches.Rectangle(
+                    (bars.get_x(), 0),    # Start position of the bar
+                    bars.get_width(),     # Width of the bar
+                    ax.get_ylim()[1],     # Maximum y-limit for the bar height
+                    hatch='///',          # Hatch pattern for stripes
+                    fill=False,           # No fill color
+                    edgecolor='red',      # Red color for stripes
+                    linewidth=1
+                )
+            )
+
     plt.yscale("log")
     plt.tight_layout()
     plt.savefig(f"path_improvement_{dataset}.pdf", format="pdf")
